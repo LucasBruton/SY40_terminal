@@ -1,0 +1,6 @@
+make --dry-run --always-make --keep-going --print-directory
+make: Entering directory '/home/lucas/Documents/UTBM/Semestre1/SY40/SY40_terminal'
+make: Leaving directory '/home/lucas/Documents/UTBM/Semestre1/SY40/SY40_terminal'
+ 
+make: *** No targets.  Stop.
+ 
