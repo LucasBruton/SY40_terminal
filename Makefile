@@ -8,7 +8,7 @@ clean:
 	rm -f ${OFILES} Terminal
 
 run: Terminal
-	./Terminal 
+	./Terminal 5
 
 Terminal : ${OFILES}
 	gcc -o Terminal ${OFILES} -lpthread
