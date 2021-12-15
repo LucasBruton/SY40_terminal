@@ -11,7 +11,7 @@
 #define CONTENEUR_POUR_TRAIN 2
 #define CONTENEUR_POUR_CAMION 3
 
-#define FICHIER_MUTEX "Makefile"
+#define FICHIER "Makefile"
 #define FICHIER_CAMION "Camion.c"
 #define FICHIER_BATEAU "Bateau.c"
 #define FICHIER_TRAIN "Train.c"
@@ -55,5 +55,14 @@ typedef struct {
     pthread_mutex_t mutex_stockage_bateau;
     pthread_mutex_t mutex_stockage_train;
 } struct_mutexs;
+
+// Structure utilisée pour la synchronisation du superviseur avec les autres véhicules à l'initialisation du terminal de transport
+typedef struct {
+    int nb_camions;
+    int nb_bateaux;
+    int nb_trains;
+    pthread_cond_t attente_vehicules;
+    pthread_mutex_t mutex;
+} debut_superviseur;
 
 #endif

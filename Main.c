@@ -7,9 +7,14 @@
 #include <sys/shm.h>
 #include <signal.h>
 #include <sys/types.h>
+#include <sys/msg.h>
 
 pthread_t id_bateau, id_portique[2], id_camion[5], id_train;
-int shmid_camions, shmid_mutex, shmid_bateaux, shmid_trains;
+int shmid_camions, shmid_mutex, shmid_bateaux, shmid_trains, shmid_synchronisation, 
+msgid_camions, msgid_trains, msgid_bateaux;
+stockage_bateau *stock_bateau;
+stockage_train *stock_train;
+stockage_camion *stock_camion;
 
 void arret(int signo) {
     // Libérations des objets IPC
@@ -27,22 +32,47 @@ void arret(int signo) {
     {
         printf("Erreur fermeture du segment de mémoire pour les bateaux\n");
     }
+    if (shmctl(shmid_synchronisation, IPC_RMID, 0) == -1)
+    {
+        printf("Erreur fermeture du segment de mémoire pour la synchronisation du superviseur avec les autres véhicules\n");
+    }
+    if (msgctl(msgid_bateaux, IPC_RMID, 0) == -1)
+    {
+        printf("Erreur fermeture file de messages des bateaux\n");
+    }
+    if (msgctl(msgid_camions, IPC_RMID, 0) == -1)
+    {
+        printf("Erreur fermeture file de messages des camions\n");
+    }
+    if (msgctl(msgid_trains, IPC_RMID, 0) == -1)
+    {
+        printf("Erreur fermeture file de messages des trains\n");
+    }
+
     printf("Fin de l'exécution du terminal...\n");
     exit(0);
+}
+
+void envoieOrdreVehicule(int portique) {
+    
 }
 
 int main(int argc, char const *argv[]) {
     pthread_t num_thread;
     int nb_camion_par_portique, nb_conteneurs_par_partie_du_bateau, nb_wagon_par_partie_du_train, nb_conteneurs_par_wagon;
     key_t cle;
-    stockage_camion * stock_camion;
     args_camions a_camion;
     struct_mutexs * mutexs;
-    stockage_bateau * stock_bateau; 
-    stockage_train * stock_train;
+    debut_superviseur * d_superviseur;
+    pthread_condattr_t cattr;
+    pthread_mutexattr_t mattr;
+
+    pthread_condattr_setpshared(&cattr, PTHREAD_PROCESS_SHARED);
+    pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED);
 
     // Vérification du nombre d'arguments passés
-    if(argc < 5) {
+    if (argc < 5)
+    {
         printf("Usage: %s <nbCamionParPortique> <nbConteneursParPartieDuBateau> <nbWagonsParPartieDuTrain> <nbConteneursParWagon>\n", argv[0]);
         return EXIT_FAILURE;
     }
@@ -75,7 +105,7 @@ int main(int argc, char const *argv[]) {
     }
 
     // Creation du segment de mémoire pour les mutex
-    if ((cle = ftok(FICHIER_MUTEX, 1)) == -1)
+    if ((cle = ftok(FICHIER, 1)) == -1)
     {
         printf("Erreur ftok\n");
         return EXIT_FAILURE;
@@ -90,9 +120,9 @@ int main(int argc, char const *argv[]) {
         printf("Erreur attachement mémoire partagée pour la structure des mutexs\n");
         pthread_exit(NULL);
     }
-    pthread_mutex_init(&mutexs->mutex_stockage_camion, NULL);
-    pthread_mutex_init(&mutexs->mutex_stockage_bateau, NULL);
-    pthread_mutex_init(&mutexs->mutex_stockage_train, NULL);
+    pthread_mutex_init(&mutexs->mutex_stockage_camion, &mattr);
+    pthread_mutex_init(&mutexs->mutex_stockage_bateau, &mattr);
+    pthread_mutex_init(&mutexs->mutex_stockage_train, &mattr);
 
     // Creation du segment de mémoire pour les camions
     if ((cle = ftok(FICHIER_CAMION, 1)) == -1)
@@ -113,6 +143,17 @@ int main(int argc, char const *argv[]) {
         stock_camion->espace_portique[1][i] = 0;
     }
 
+    // Creation de la file de messages pour les camions
+    if ((cle = ftok(FICHIER_CAMION, 2)) == -1)
+    {
+        printf("Erreur ftok\n");
+        return EXIT_FAILURE;
+    }
+    if ((msgid_camions = msgget(cle, IPC_CREAT | 0666)) == -1)
+    {
+        printf("Erreur création de la file de messages pour les camions\n");
+        kill(getpid(), SIGINT);
+    }
 
     // Creation du segment de mémoire pour les bateaux
     if ((cle = ftok(FICHIER_BATEAU, 1)) == -1)
@@ -133,6 +174,18 @@ int main(int argc, char const *argv[]) {
     {
         stock_bateau->espace_portique[0][i] = 0;
         stock_bateau->espace_portique[1][i] = 0;
+    }
+
+    // Creation de la file de messages pour les bateaux
+    if ((cle = ftok(FICHIER_BATEAU, 2)) == -1)
+    {
+        printf("Erreur ftok\n");
+        return EXIT_FAILURE;
+    }
+    if ((msgid_bateaux = msgget(cle, IPC_CREAT | 0666)) == -1)
+    {
+        printf("Erreur création de la file de messages pour les camions\n");
+        kill(getpid(), SIGINT);
     }
 
     // Creation du segment de mémoire pour les trains
@@ -159,9 +212,44 @@ int main(int argc, char const *argv[]) {
         }
     }
 
+    // Creation de la file de messages pour les trains
+    if ((cle = ftok(FICHIER_TRAIN, 2)) == -1)
+    {
+        printf("Erreur ftok\n");
+        return EXIT_FAILURE;
+    }
+    if ((msgid_trains = msgget(cle, IPC_CREAT | 0666)) == -1)
+    {
+        printf("Erreur création de la file de messages pour les camions\n");
+        kill(getpid(), SIGINT);
+    }
+
+    // Creation du segment de mémoire pour la synchronisation du superviseur avec les autres véhicules
+    if ((cle = ftok(FICHIER, 2)) == -1)
+    {
+        printf("Erreur ftok\n");
+        return EXIT_FAILURE;
+    }
+    if ((shmid_synchronisation = shmget(cle, sizeof(debut_superviseur), IPC_CREAT | 0666)) == -1)
+    {
+        printf("Erreur création segment de mémoire pour les camions\n");
+        kill(getpid(), SIGINT);
+    }
+
+    // Initialisation du segment de mémoire pour la synchronisation du superviseur avec les autres véhicules
+    d_superviseur = (debut_superviseur *)shmat(shmid_synchronisation, NULL, 0);
+    d_superviseur->nb_bateaux = 0;
+    d_superviseur->nb_trains = 0;
+    d_superviseur->nb_camions  = 0;
+    pthread_condattr_init(&cattr);
+    pthread_cond_init(&d_superviseur->attente_vehicules, &cattr);
+    pthread_mutex_init(&d_superviseur->mutex, &mattr);
+
+    // Création des threads des véhicules
     pthread_create(&id_bateau, NULL, bateau, NULL);
     pthread_create(&id_portique[0], NULL, portique, NULL);
     pthread_create(&id_portique[1], NULL, portique, NULL);
+    pthread_create(&id_train, NULL, train, NULL);
 
     // Création des threads camions
     for(int j = 1;  j <=2; ++j) {
@@ -172,9 +260,14 @@ int main(int argc, char const *argv[]) {
         }
     }
 
+    pthread_mutex_lock(&d_superviseur->mutex);
+    while (d_superviseur->nb_trains < 1 || d_superviseur->nb_bateaux < 1 || d_superviseur->nb_camions < 2 * nb_camion_par_portique)
+    {
+        pthread_cond_wait(&d_superviseur->attente_vehicules, &d_superviseur->mutex);
+    }
+    pthread_mutex_unlock(&d_superviseur->mutex);
+    printf("Fin attente synchro\n");
 
-    pthread_create(&id_train, NULL, train, NULL);
     pause();
-
     return EXIT_SUCCESS;
 }
