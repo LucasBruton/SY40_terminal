@@ -3,6 +3,8 @@
 
 #define MAX_CAMION_PORTIQUE 50
 #define MAX_BATEAU_PORTIQUE 50
+#define MAX_WAGON_TRAIN 5
+#define MAX_CONTENEURS_WAGON 50
 
 #define ESPACE_CONTENEUR_VIDE 0
 #define CONTENEUR_POUR_BATEAU 1
@@ -12,6 +14,7 @@
 #define FICHIER_MUTEX "Makefile"
 #define FICHIER_CAMION "Camion.c"
 #define FICHIER_BATEAU "Bateau.c"
+#define FICHIER_TRAIN "Train.c"
 
 void * bateau(void *);
 void * portique(void *);
@@ -38,9 +41,19 @@ typedef struct {
     int espace_portique[2][MAX_BATEAU_PORTIQUE];
 } stockage_bateau;
 
+// Structure contenant les conteneurs d'un train
+typedef struct
+{
+    int nb_conteneurs_par_wagon;
+    int nb_wagon_par_partie_du_train;
+    int espace_portique[2][MAX_WAGON_TRAIN][MAX_CONTENEURS_WAGON];
+} stockage_train;
+
 // Structure contenant les mutexs utilisés par plusiers threads
 typedef struct {
     pthread_mutex_t mutex_stockage_camion;
+    pthread_mutex_t mutex_stockage_bateau;
+    pthread_mutex_t mutex_stockage_train;
 } struct_mutexs;
 
 #endif
