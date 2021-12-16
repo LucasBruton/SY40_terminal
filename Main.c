@@ -10,7 +10,7 @@
 #include <sys/msg.h>
 
 pthread_t id_bateau, id_portique[2], id_camion[5], id_train;
-int shmid_camions, shmid_mutex, shmid_bateaux, shmid_trains, shmid_synchronisation, 
+int shmid_camions, shmid_bateaux, shmid_trains, shmid_synchronisation, 
 msgid_camions, msgid_trains, msgid_bateaux;
 stockage_bateau *stock_bateau;
 stockage_train *stock_train;
@@ -20,9 +20,6 @@ void arret(int signo) {
     // Libérations des objets IPC
     if (shmctl(shmid_camions, IPC_RMID, 0) == -1) {
         printf("Erreur fermeture du segment de mémoire pour les camions\n");
-    }
-    if (shmctl(shmid_mutex, IPC_RMID, 0) == -1) {
-        printf("Erreur fermeture du segment de mémoire pour les mutex\n");
     }
     if (shmctl(shmid_bateaux, IPC_RMID, 0) == -1)
     {
@@ -62,7 +59,6 @@ int main(int argc, char const *argv[]) {
     int nb_camion_par_portique, nb_conteneurs_par_partie_du_bateau, nb_wagon_par_partie_du_train, nb_conteneurs_par_wagon;
     key_t cle;
     args_camions a_camion;
-    struct_mutexs * mutexs;
     debut_superviseur * d_superviseur;
     pthread_condattr_t cattr;
     pthread_mutexattr_t mattr;
@@ -104,25 +100,6 @@ int main(int argc, char const *argv[]) {
         return EXIT_FAILURE;
     }
 
-    // Creation du segment de mémoire pour les mutex
-    if ((cle = ftok(FICHIER, 1)) == -1)
-    {
-        printf("Erreur ftok\n");
-        return EXIT_FAILURE;
-    }
-    if ((shmid_mutex = shmget(cle, sizeof(struct_mutexs), IPC_CREAT | 0600)) == -1) {
-        printf("Erreur création segment de mémoire pour les camions\n");
-        return EXIT_FAILURE;
-    }
-    // Initialisation des mutex utilisés à travers le programme
-    if ((mutexs = (struct_mutexs *)shmat(shmid_mutex, NULL, 0)) == -1)
-    {
-        printf("Erreur attachement mémoire partagée pour la structure des mutexs\n");
-        pthread_exit(NULL);
-    }
-    pthread_mutex_init(&mutexs->mutex_stockage_camion, &mattr);
-    pthread_mutex_init(&mutexs->mutex_stockage_bateau, &mattr);
-    pthread_mutex_init(&mutexs->mutex_stockage_train, &mattr);
 
     // Creation du segment de mémoire pour les camions
     if ((cle = ftok(FICHIER_CAMION, 1)) == -1)
@@ -138,6 +115,7 @@ int main(int argc, char const *argv[]) {
     // Initialisation du segment de mémoire pour les camions
     stock_camion = (stockage_camion *)shmat(shmid_camions, NULL, 0);
     stock_camion->nb_camion_par_portique = nb_camion_par_portique;
+    pthread_mutex_init(&stock_camion->mutex, &mattr);
     for(int i = 0; i<nb_camion_par_portique; ++i) {
         stock_camion->espace_portique[0][i] = 0;
         stock_camion->espace_portique[1][i] = 0;
@@ -170,6 +148,7 @@ int main(int argc, char const *argv[]) {
     // Initialisation du segment de mémoire pour les bateaux
     stock_bateau = (stockage_bateau *)shmat(shmid_bateaux, NULL, 0);
     stock_bateau->nb_conteneurs_par_partie_du_bateau = nb_camion_par_portique;
+    pthread_mutex_init(&stock_bateau->mutex, &mattr);
     for (int i = 0; i < nb_conteneurs_par_partie_du_bateau; ++i)
     {
         stock_bateau->espace_portique[0][i] = 0;
@@ -204,6 +183,7 @@ int main(int argc, char const *argv[]) {
     stock_train = (stockage_train *)shmat(shmid_trains, NULL, 0);
     stock_train->nb_conteneurs_par_wagon = nb_conteneurs_par_wagon;
     stock_train->nb_wagon_par_partie_du_train = nb_wagon_par_partie_du_train;
+    pthread_mutex_init(&stock_train->mutex, &mattr);
     for (int i = 0; i < nb_wagon_par_partie_du_train; ++i)
     {
         for (int j = 0; j < nb_conteneurs_par_wagon; ++j) {
@@ -225,7 +205,7 @@ int main(int argc, char const *argv[]) {
     }
 
     // Creation du segment de mémoire pour la synchronisation du superviseur avec les autres véhicules
-    if ((cle = ftok(FICHIER, 2)) == -1)
+    if ((cle = ftok(FICHIER, 1)) == -1)
     {
         printf("Erreur ftok\n");
         return EXIT_FAILURE;

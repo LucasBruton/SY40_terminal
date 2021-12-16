@@ -15,29 +15,11 @@ void *camion(void *arg) {
     key_t cle;
     int shmid_mutex, shmid_camions, shmid_depart, random, msgid;
     stockage_camion *stock_camion;
-    struct_mutexs* mutexs;
     debut_superviseur *d_superviseur;
     srand(time(NULL));
 
-    // Récupération du segment de mémoire utilisé pour les mutex du programme
-    if ((cle = ftok(FICHIER, 1)) == -1)
-    {
-        printf("Erreur ftok\n");
-        kill(getpid(), SIGINT);
-    }
-    if ((shmid_mutex = shmget(cle, 0, 0)) == -1)
-    {
-        printf("Erreur création segment de mémoire pour les camions\n");
-        kill(getpid(), SIGINT);
-    }
-
-    if((mutexs = (struct_mutexs*)shmat(shmid_mutex, NULL, 0)) == -1) {
-        printf("Erreur attachement mémoire partagée pour la structure des mutexs\n");
-        kill(getpid(), SIGINT);
-    }
-
     // Récupération du segment de mémoire utilisé pour synchronisation du superviseur avec les autres véhicules
-    if ((cle = ftok(FICHIER, 2)) == -1)
+    if ((cle = ftok(FICHIER, 1)) == -1)
     {
         printf("Erreur ftok\n");
         kill(getpid(), SIGINT);
@@ -84,7 +66,7 @@ void *camion(void *arg) {
 
     // Initialisation du conteneur du camion
     random = rand()%4;
-    pthread_mutex_lock(&mutexs->mutex_stockage_camion);
+    pthread_mutex_lock(&stock_camion->mutex);
     if(random < 2) {
         stock_camion->espace_portique[a_camions->numVoiePortique][a_camions->numEspacePortique] = ESPACE_CONTENEUR_VIDE;
     }else if(random == 2) {
@@ -92,8 +74,9 @@ void *camion(void *arg) {
     }else {
         stock_camion->espace_portique[a_camions->numVoiePortique][a_camions->numEspacePortique] = CONTENEUR_POUR_TRAIN;
     }
-    pthread_mutex_unlock(&mutexs->mutex_stockage_camion);
+    pthread_mutex_unlock(&stock_camion->mutex);
 
+    // Ajout d'un camion aux nombre de camions qui sont prets
     pthread_mutex_lock(&d_superviseur->mutex);
     d_superviseur->nb_camions++;
     pthread_cond_signal(&d_superviseur->attente_vehicules);

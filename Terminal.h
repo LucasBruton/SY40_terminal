@@ -23,6 +23,7 @@ void * camion(void *);
 
 // Structure contenant les conteneurs des camions
 typedef struct {
+    pthread_mutex_t mutex;
     // Nombre de camions qu'un portique peut accéder à un moment donné
     int nb_camion_par_portique;
     // Tableau contenant les conteneurs des camions accessible par le portique 1 et le portique 2
@@ -37,6 +38,7 @@ typedef struct {
 
 // Structure contenant les conteneurs d'un bateau
 typedef struct {
+    pthread_mutex_t mutex;
     int nb_conteneurs_par_partie_du_bateau;
     int espace_portique[2][MAX_BATEAU_PORTIQUE];
 } stockage_bateau;
@@ -44,17 +46,11 @@ typedef struct {
 // Structure contenant les conteneurs d'un train
 typedef struct
 {
+    pthread_mutex_t mutex;
     int nb_conteneurs_par_wagon;
     int nb_wagon_par_partie_du_train;
     int espace_portique[2][MAX_WAGON_TRAIN][MAX_CONTENEURS_WAGON];
 } stockage_train;
-
-// Structure contenant les mutexs utilisés par plusiers threads
-typedef struct {
-    pthread_mutex_t mutex_stockage_camion;
-    pthread_mutex_t mutex_stockage_bateau;
-    pthread_mutex_t mutex_stockage_train;
-} struct_mutexs;
 
 // Structure utilisée pour la synchronisation du superviseur avec les autres véhicules à l'initialisation du terminal de transport
 typedef struct {

@@ -13,32 +13,13 @@ void *bateau(void *arg)
 {
     printf("Je suis un bateau\n");
     key_t cle;
-    int shmid_mutex, shmid_bateaux, shmid_depart, random, msgid;
+    int shmid_bateaux, shmid_depart, random, msgid;
     stockage_bateau *stock_bateaux;
-    struct_mutexs *mutexs;
     debut_superviseur *d_superviseur;
     srand(time(NULL));
 
-    // Récupération du segment de mémoire utilisé pour les mutex du programme
-    if ((cle = ftok(FICHIER, 1)) == -1)
-    {
-        printf("Erreur ftok\n");
-        kill(getpid(), SIGINT);
-    }
-    if ((shmid_mutex = shmget(cle, 0, 0)) == -1)
-    {
-        printf("Erreur création segment de mémoire pour les camions\n");
-        kill(getpid(), SIGINT);
-    }
-
-    if ((mutexs = (struct_mutexs *)shmat(shmid_mutex, NULL, 0)) == -1)
-    {
-        printf("Erreur attachement mémoire partagée pour la structure des mutexs\n");
-        kill(getpid(), SIGINT);
-    }
-
     // Récupération du segment de mémoire utilisé pour synchronisation du superviseur avec les autres véhicules
-    if ((cle = ftok(FICHIER, 2)) == -1)
+    if ((cle = ftok(FICHIER, 1)) == -1)
     {
         printf("Erreur ftok\n");
         kill(getpid(), SIGINT);
@@ -85,7 +66,7 @@ void *bateau(void *arg)
     }
 
     // Initialisation des conteneurs du bateau
-    pthread_mutex_lock(&mutexs->mutex_stockage_bateau);
+    pthread_mutex_lock(&stock_bateaux->mutex);
     for(int i = 0; i<2; ++i) {
         for (int j = 0; j < stock_bateaux->nb_conteneurs_par_partie_du_bateau; ++j)
         {
@@ -104,8 +85,9 @@ void *bateau(void *arg)
             } 
         }
     }
-    pthread_mutex_unlock(&mutexs->mutex_stockage_bateau);
+    pthread_mutex_unlock(&stock_bateaux->mutex);
 
+    // Ajout d'un bateau aux nombre de bateaux qui sont prets
     pthread_mutex_lock(&d_superviseur->mutex);
     d_superviseur->nb_bateaux++;
     pthread_cond_signal(&d_superviseur->attente_vehicules);
