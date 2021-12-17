@@ -8,14 +8,16 @@
 #include <sys/types.h>
 #include <signal.h>
 #include <unistd.h>
+#include <sys/msg.h>
 
 void *camion(void *arg) {
     printf("Je suis un camion\n");
     args_camions *a_camions = (args_camions*)arg;
     key_t cle;
-    int shmid_mutex, shmid_camions, shmid_depart, random, msgid;
+    int shmid_mutex, shmid_camions, shmid_depart, random, msgid_camions, msgid_superviseur;
     stockage_camion *stock_camion;
     debut_superviseur *d_superviseur;
+    message_camion msg_camion;
     srand(time(NULL));
 
     // Récupération du segment de mémoire utilisé pour synchronisation du superviseur avec les autres véhicules
@@ -53,12 +55,23 @@ void *camion(void *arg) {
         kill(getpid(), SIGINT);
     }
     // Récupération de la file de messages des camions
-    if ((cle = ftok(FICHIER_BATEAU, 2)) == -1)
+    if ((cle = ftok(FICHIER_CAMION, 2)) == -1)
     {
         printf("Erreur ftok\n");
         return EXIT_FAILURE;
     }
-    if ((msgid = msgget(cle, 0)) == -1)
+    if ((msgid_camions = msgget(cle, 0)) == -1)
+    {
+        printf("Erreur création de la file de messages pour les camions\n");
+        kill(getpid(), SIGINT);
+    }
+    // Récupération de la file de messages des camions
+    if ((cle = ftok(FICHIER, 2)) == -1)
+    {
+        printf("Erreur ftok\n");
+        return EXIT_FAILURE;
+    }
+    if ((msgid_superviseur = msgget(cle, 0)) == -1)
     {
         printf("Erreur création de la file de messages pour les camions\n");
         kill(getpid(), SIGINT);
@@ -81,6 +94,12 @@ void *camion(void *arg) {
     d_superviseur->nb_camions++;
     pthread_cond_signal(&d_superviseur->attente_vehicules);
     pthread_mutex_unlock(&d_superviseur->mutex);
+
+    while(1) {
+        msgrcv(msgid_camions, &msg_camion, sizeof(message_camion) - sizeof(long), a_camions->numVoiePortique * 10 + a_camions->numEspacePortique, 0);
+        printf("Message reçu !\n");
+        pause();
+    }
 
     printf("Fin camion\n");
 }

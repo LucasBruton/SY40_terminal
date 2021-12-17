@@ -91,7 +91,7 @@ void *train(void *arg)
             }
         }
     }
-    pthread_mutex_lock(&stock_train->mutex);
+    pthread_mutex_unlock(&stock_train->mutex);
 
     // Ajout d'un train aux nombre de trains qui sont prets
     pthread_mutex_lock(&d_superviseur->mutex);

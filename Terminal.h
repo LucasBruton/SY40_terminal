@@ -11,6 +11,9 @@
 #define CONTENEUR_POUR_TRAIN 2
 #define CONTENEUR_POUR_CAMION 3
 
+#define TRUE 1
+#define FALSE 0
+
 #define FICHIER "Makefile"
 #define FICHIER_CAMION "Camion.c"
 #define FICHIER_BATEAU "Bateau.c"
@@ -60,5 +63,20 @@ typedef struct {
     pthread_cond_t attente_vehicules;
     pthread_mutex_t mutex;
 } debut_superviseur;
+
+typedef struct
+{
+    long type;
+    int envoie_conteneur;
+    int destinataire;
+} message_camion;
+
+typedef struct
+{
+    long type;
+    int quitter_terminal;
+    int transport;
+    int camion_emplacement;
+} message_transport_superviseur;
 
 #endif
