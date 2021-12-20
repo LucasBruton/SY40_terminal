@@ -11,11 +11,16 @@
 
 void *train(void *arg)
 {
-    printf("Je suis un train\n");
     key_t cle;
-    int shmid_mutex, shmid_trains, shmid_depart, random, msgid;
+    int shmid_mutex, shmid_trains, shmid_depart, random, msgid_trains, msgid_portiques,
+        msgid_superviseur, conteneurs_trains = 0, train_rempli;
     stockage_train *stock_train;
     debut_superviseur *d_superviseur;
+    message_train msg_train;
+    message_fin_ordre_superviseur msg_fin_ordre;
+    message_portique msg_portique;
+    msg_fin_ordre.type = 1;
+    msg_fin_ordre.type_transport = CONTENEUR_POUR_TRAIN;
     srand(time(NULL));
 
     // Récupération du segment de mémoire utilisé pour synchronisation du superviseur avec les autres véhicules
@@ -59,7 +64,31 @@ void *train(void *arg)
         printf("Erreur ftok\n");
         return EXIT_FAILURE;
     }
-    if ((msgid = msgget(cle, 0)) == -1)
+    if ((msgid_trains = msgget(cle, 0)) == -1)
+    {
+        printf("Erreur création de la file de messages pour les camions\n");
+        kill(getpid(), SIGINT);
+    }
+
+    // Récupération de la file de messages pour les portiques
+    if ((cle = ftok(FICHIER_PORTIQUE, 1)) == -1)
+    {
+        printf("Erreur ftok\n");
+        return EXIT_FAILURE;
+    }
+    if ((msgid_portiques = msgget(cle, IPC_CREAT | 0666)) == -1)
+    {
+        printf("Erreur récupération de la file de messages pour les portiques\n");
+        kill(getpid(), SIGINT);
+    }
+
+    // Récupération de la file de messages pour le superviseur
+    if ((cle = ftok(FICHIER, 2)) == -1)
+    {
+        printf("Erreur ftok\n");
+        return EXIT_FAILURE;
+    }
+    if ((msgid_superviseur = msgget(cle, 0)) == -1)
     {
         printf("Erreur création de la file de messages pour les camions\n");
         kill(getpid(), SIGINT);
@@ -67,6 +96,7 @@ void *train(void *arg)
 
     // Initalisation des conteneurs du train
     pthread_mutex_lock(&stock_train->mutex);
+    train_rempli = 2 * stock_train->nb_conteneurs_par_wagon * stock_train->nb_wagon_par_partie_du_train;
     for (int i = 0; i < 2; ++i)
     {
         for (int j = 0; j < stock_train->nb_wagon_par_partie_du_train; ++j)
@@ -98,5 +128,54 @@ void *train(void *arg)
     d_superviseur->nb_trains++;
     pthread_cond_signal(&d_superviseur->attente_vehicules);
     pthread_mutex_unlock(&d_superviseur->mutex);
-    printf("Fin train\n");
+
+    while (1)
+    {
+        msgrcv(msgid_trains, &msg_train, sizeof(message_train) - sizeof(long), 1, 0);
+        if (msg_train.envoie_conteneur == TRUE)
+        {
+            pthread_mutex_lock(&stock_train->mutex);
+            stock_train->espace_portique[msg_train.voie_portique][msg_train.wagon][msg_train.wagon_emplacement] = ESPACE_CONTENEUR_VIDE;
+            pthread_mutex_unlock(&stock_train->mutex);
+            printf("Le train donne son conteneur à l'emplacement %d du wagon %d qui se trouve sur la voie %d\n", msg_train.wagon_emplacement, msg_train.wagon, msg_train.voie_portique);
+            msg_portique.destinataire = msg_train.destinataire;
+            msg_portique.type = msg_train.voie_portique + 1;
+            if (msg_train.destinataire == CONTENEUR_POUR_CAMION)
+            {
+                msg_portique.camion_destinataire = msg_train.camion_destinataire;
+            }
+            else
+            {
+                msg_portique.bateau_emplacement = msg_train.bateau_emplacement;
+            }
+            msgsnd(msgid_portiques, &msg_portique, sizeof(message_portique) - sizeof(long), 0);
+        }
+        else
+        {
+            pthread_mutex_lock(&stock_train->mutex);
+            printf("Le train a reçu un conteneur pour l'emplacement %d du wagon %d de la voie du portique %d\n", msg_train.wagon_emplacement, msg_train.wagon, msg_train.voie_portique);
+            conteneurs_trains++;
+            stock_train->espace_portique[msg_train.voie_portique][msg_train.wagon][msg_train.wagon_emplacement] = CONTENEUR_POUR_TRAIN;
+            if (conteneurs_trains == train_rempli)
+            {
+                msg_fin_ordre.plein_conteneurs = TRUE;
+                printf("Le train quitte le terminal de transport\n");
+                pthread_mutex_lock(&d_superviseur->mutex);
+                d_superviseur->nb_trains--;
+                pthread_cond_signal(&d_superviseur->attente_vehicules);
+                pthread_mutex_unlock(&d_superviseur->mutex);
+            }
+            else
+            {
+                msg_fin_ordre.plein_conteneurs = FALSE;
+            }
+            msgsnd(msgid_superviseur, &msg_fin_ordre, sizeof(message_fin_ordre_superviseur) - sizeof(long), 0);
+            if (conteneurs_trains == train_rempli)
+            {
+                pthread_mutex_unlock(&stock_train->mutex);
+                pthread_exit(NULL);
+            }
+            pthread_mutex_unlock(&stock_train->mutex);
+        }
+    }
 }

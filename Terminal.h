@@ -18,6 +18,7 @@
 #define FICHIER_CAMION "Camion.c"
 #define FICHIER_BATEAU "Bateau.c"
 #define FICHIER_TRAIN "Train.c"
+#define FICHIER_PORTIQUE "Portique.c"
 
 void * bateau(void *);
 void * portique(void *);
@@ -60,6 +61,7 @@ typedef struct {
     int nb_camions;
     int nb_bateaux;
     int nb_trains;
+    int nb_portiques;
     pthread_cond_t attente_vehicules;
     pthread_mutex_t mutex;
 } debut_superviseur;
@@ -68,8 +70,24 @@ typedef struct
 {
     long type;
     int envoie_conteneur;
-    int destinataire;
+    int desinataire;
+    int train_wagon;
+    int wagon_emplacement;
+    int bateau_emplacement;
+    int voie_portique;
 } message_camion;
+
+typedef struct
+{
+    long type;
+    int envoie_conteneur;
+    int destinataire;
+    int camion_destinataire;
+    int voie_portique;
+    int emplacement_conteneur;
+    int train_wagon;
+    int wagon_emplacement;
+} message_bateau;
 
 typedef struct
 {
@@ -78,5 +96,38 @@ typedef struct
     int transport;
     int camion_emplacement;
 } message_transport_superviseur;
+
+
+typedef struct
+{
+    long type;
+    int destinataire;
+    int camion_destinataire;
+    int train_wagon;
+    int wagon_emplacement;
+    int bateau_emplacement;
+} message_portique;
+
+typedef struct
+{
+    long type;
+    int envoie_conteneur;
+    int destinataire;
+    int camion_destinataire;
+    int voie_portique;
+    int wagon;
+    int wagon_emplacement;
+    int bateau_emplacement;
+} message_train;
+
+typedef struct
+{
+    long type;
+    int plein_conteneurs;
+    int type_transport;
+    int camion_voie_portique;
+    int camion_emplacement;
+} message_fin_ordre_superviseur;
+
 
 #endif
