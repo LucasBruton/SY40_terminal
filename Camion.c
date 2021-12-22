@@ -152,23 +152,36 @@ void *camion(void *arg) {
         num_attente = msg_creation_camion.num_attente;
         printf("Camion1: %d %d attente\n", num_attente, pthread_self());
         msgrcv(msgid_camions_attente, &msg_attente_camion, sizeof(message_attente_camion) - sizeof(long), num_attente, 0);
+        printf("Camion attente %d réveillé: endormir %d\n", num_attente, msg_attente_camion.endormir_camion);
         voie_portique = msg_attente_camion.voie_portique;
         emplacement_portique = msg_attente_camion.emplacement_portique;
-        msg_camion_envoi.type = emplacement_portique+1;
-        msg_camion_envoi.attente = TRUE;
-        msg_camion_envoi.num_attente = num_attente;
-        msg_camion_envoi.voie_portique = voie_portique;
-        msgsnd(msgid_camions[voie_portique], &msg_camion_envoi, sizeof(message_camion) - sizeof(long), 0);
-        printf("Camion2: %d %d attente\n", num_attente, pthread_self());
-        msgrcv(msgid_camions_com, &msg_retour, sizeof(message_retour) - sizeof(long), voie_portique+1, 0);
-        printf("Camion3: %d %d attente\n", num_attente, pthread_self());
-        pthread_mutex_lock(&stock_camion->mutex);
-        stock_camion->espace_portique[voie_portique][emplacement_portique] = conteneur;
-        pthread_mutex_unlock(&stock_camion->mutex);
-        printf("Camion4: %d %d attente\n", num_attente, pthread_self());
-        msg_fin_ordre.plein_conteneurs = FALSE;
-        msgsnd(msgid_superviseur, &msg_fin_ordre, sizeof(message_fin_ordre_superviseur) - sizeof(long), 0);
-        printf("Camion5: %d %d attente\n", num_attente, pthread_self());
+
+        if(msg_attente_camion.endormir_camion==TRUE) {
+            msg_camion_envoi.type = emplacement_portique + 1;
+            msg_camion_envoi.attente = TRUE;
+            msg_camion_envoi.num_attente = num_attente;
+            msg_camion_envoi.voie_portique = voie_portique;
+            msgsnd(msgid_camions[voie_portique], &msg_camion_envoi, sizeof(message_camion) - sizeof(long), 0);
+            printf("Camion2: %d %d attente\n", num_attente, pthread_self());
+            msgrcv(msgid_camions_com, &msg_retour, sizeof(message_retour) - sizeof(long), voie_portique + 1, 0);
+            printf("Camion3: %d %d attente\n", num_attente, pthread_self());
+            pthread_mutex_lock(&stock_camion->mutex);
+            stock_camion->espace_portique[voie_portique][emplacement_portique] = conteneur;
+            pthread_mutex_unlock(&stock_camion->mutex);
+            printf("Camion4: %d %d attente\n", num_attente, pthread_self());
+            msg_fin_ordre.plein_conteneurs = FALSE;
+            msgsnd(msgid_superviseur, &msg_fin_ordre, sizeof(message_fin_ordre_superviseur) - sizeof(long), 0);
+            printf("Camion5: %d %d attente\n", num_attente, pthread_self());
+        }else {
+            printf("Camion deplacement %d!\n", num_attente);
+
+            pthread_mutex_lock(&stock_camion->mutex);
+            stock_camion->espace_portique[voie_portique][emplacement_portique] = conteneur;
+            pthread_mutex_unlock(&stock_camion->mutex);
+            msg_retour.type = 3;
+            msgsnd(msgid_camions_creation, &msg_retour, sizeof(message_retour) - sizeof(long), NULL);
+        }
+
     }else {
         voie_portique = msg_creation_camion.voie_portique;
         emplacement_portique = msg_creation_camion.emplacement_portique;
@@ -187,21 +200,30 @@ void *camion(void *arg) {
             msgsnd(msgid_camions_com, &msg_retour, sizeof(message_retour) - sizeof(long), 0);
             msgrcv(msgid_camions_attente, &msg_attente_camion, sizeof(message_attente_camion) - sizeof(long), num_attente, 0);
             voie_portique = msg_attente_camion.voie_portique;
-            emplacement_portique = msg_attente_camion.emplacement_portique;
-            msg_camion_envoi.type = emplacement_portique + 1;
-            msg_camion_envoi.attente = TRUE;
-            msg_camion_envoi.num_attente = num_attente;
-            msg_camion_envoi.voie_portique = voie_portique;
-            printf("Camion7: %d %d attente\n", num_attente, pthread_self());
-            msgsnd(msgid_camions[voie_portique], &msg_camion_envoi, sizeof(message_camion) - sizeof(long), 0);
-            msgrcv(msgid_camions_com, &msg_retour, sizeof(message_retour) - sizeof(long), voie_portique+1, 0);
-            printf("Camion8: %d %d attente\n", num_attente, pthread_self());
-            pthread_mutex_lock(&stock_camion->mutex);
-            stock_camion->espace_portique[voie_portique][emplacement_portique] = conteneur;
-            pthread_mutex_unlock(&stock_camion->mutex);
-            msg_fin_ordre.plein_conteneurs = FALSE;
-            msgsnd(msgid_superviseur, &msg_fin_ordre, sizeof(message_fin_ordre_superviseur) - sizeof(long), 0);
-            printf("Camion9: %d %d attente\n", num_attente, pthread_self());
+
+            if (msg_attente_camion.endormir_camion == TRUE) {
+                emplacement_portique = msg_attente_camion.emplacement_portique;
+                msg_camion_envoi.type = emplacement_portique + 1;
+                msg_camion_envoi.attente = TRUE;
+                msg_camion_envoi.num_attente = num_attente;
+                msg_camion_envoi.voie_portique = voie_portique;
+                printf("Camion7: %d %d attente\n", num_attente, pthread_self());
+                msgsnd(msgid_camions[voie_portique], &msg_camion_envoi, sizeof(message_camion) - sizeof(long), 0);
+                msgrcv(msgid_camions_com, &msg_retour, sizeof(message_retour) - sizeof(long), voie_portique+1, 0);
+                printf("Camion8: %d %d attente\n", num_attente, pthread_self());
+                pthread_mutex_lock(&stock_camion->mutex);
+                stock_camion->espace_portique[voie_portique][emplacement_portique] = conteneur;
+                pthread_mutex_unlock(&stock_camion->mutex);
+                msg_fin_ordre.plein_conteneurs = FALSE;
+                msgsnd(msgid_superviseur, &msg_fin_ordre, sizeof(message_fin_ordre_superviseur) - sizeof(long), 0);
+                printf("Camion9: %d %d attente\n", num_attente, pthread_self());
+            }else {
+                pthread_mutex_lock(&stock_camion->mutex);
+                stock_camion->espace_portique[voie_portique][emplacement_portique] = conteneur;
+                pthread_mutex_unlock(&stock_camion->mutex);
+                msg_retour.type = 3;
+                msgsnd(msgid_camions_creation, &msg_retour, sizeof(message_retour) - sizeof(long), NULL);
+            }
         }else {
             if (msg_camion.envoie_conteneur == TRUE)
             {

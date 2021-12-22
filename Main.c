@@ -214,6 +214,7 @@ int deplacerConteneurCamion(int portique)
     envoi.envoie_conteneur = TRUE;
     envoi.voie_portique = portique;
     envoi.attente = FALSE;
+    msg_attente.endormir_camion = TRUE;
     int conteneur, destination;
     pthread_mutex_lock(&stock_camion->mutex);
     for (int i = 0; i < stock_camion->nb_camion_par_portique; ++i)
@@ -306,7 +307,7 @@ void envoieOrdreVehicule(void *arg)
             retour_superviseur[portique] = deplacerConteneurCamion(portique);
             printf("Superviseur %d: check camion -> %d\n", portique, retour_superviseur[portique]);
         }
-        // check_transport[portique] = (check_transport[portique] + 1)%3;
+        check_transport[portique] = (check_transport[portique] + 1)%3;
     }
 }
 
@@ -368,6 +369,7 @@ int main(int argc, char const *argv[])
     message_fin_ordre_superviseur msg_fin_ordre;
     message_creation_camion msg_creation_camion;
     message_retour msg_creation_retour;
+    message_attente_camion msg_attente_camion;
 
     pthread_mutexattr_init(&mattr);
     pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED);
@@ -664,11 +666,12 @@ int main(int argc, char const *argv[])
     }
 
     // Initialisation des variables globales check_transport et check_camion
-    check_transport[0] = 2;
-    check_transport[1] = 2;
+    check_transport[0] = 0;
+    check_transport[1] = 0;
     check_camion[0] = 0;
     check_camion[1] = 0;
     prochain_camion_attente = 1;
+    msg_attente_camion.endormir_camion = FALSE;
     pthread_mutex_init(&mutex_prochain_camion, NULL);
 
     // synchronisationCreationVehicules();
@@ -682,7 +685,6 @@ int main(int argc, char const *argv[])
         pthread_create(&id_ordre_superviseur[1], NULL, envoieOrdreVehicule, (void *)1);
         
         pthread_join(id_ordre_superviseur[0], NULL);
-        
         pthread_join(id_ordre_superviseur[1], NULL);
         ordre_reussi = 0;
         ordre_reussi += retour_superviseur[0];
@@ -693,11 +695,21 @@ int main(int argc, char const *argv[])
             if(msg_fin_ordre.plein_conteneurs == TRUE) {
                 if(msg_fin_ordre.type_transport == CONTENEUR_POUR_CAMION) {
                     printf("Création nouveau camion sur la voie %d à l'emplacement %d\n", msg_fin_ordre.camion_voie_portique, msg_fin_ordre.camion_emplacement);
-                    msg_creation_camion.voie_portique = msg_fin_ordre.camion_voie_portique;
-                    msg_creation_camion.emplacement_portique = msg_fin_ordre.camion_emplacement;
+                    msg_attente_camion.type = prochain_camion_attente;
+                    msg_attente_camion.voie_portique = msg_fin_ordre.camion_voie_portique;
+                    msg_attente_camion.emplacement_portique = msg_fin_ordre.camion_emplacement;
+                    msg_attente_camion.endormir_camion = FALSE;
+                    msg_creation_camion.type = 1;
+                    msg_creation_camion.attente = TRUE;
+                    msg_creation_camion.num_attente = prochain_camion_attente;
+                    msgsnd(msgid_camions_attente, &msg_attente_camion, sizeof(message_attente_camion) - sizeof(long), 0);
+                    msgrcv(msgid_camions_creation, &msg_creation_retour, sizeof(message_retour) - sizeof(long), 3, 0);
+                    printf("Fin attente deplacement camion\n");
                     pthread_create(&id_camion, NULL, camion, NULL);
                     msgsnd(msgid_camions_creation, &msg_creation_camion, sizeof(message_creation_camion) - sizeof(long), 0);
                     msgrcv(msgid_camions_creation, &msg_creation_retour, sizeof(message_retour) - sizeof(long), 2, 0);
+                    prochain_camion_attente = prochain_camion_attente % nb_camion_attente + 1;
+                    printf("Fin création camion\n");
                 }else if (msg_fin_ordre.type_transport == CONTENEUR_POUR_TRAIN) {
                     printf("Création d'un nouveau train\n");
                     pthread_create(&id_train, NULL, train, NULL);

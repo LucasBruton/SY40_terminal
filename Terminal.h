@@ -135,6 +135,7 @@ typedef struct
     long type;
     int voie_portique;
     int emplacement_portique;
+    int endormir_camion;
 } message_attente_camion;
 
 #endif
