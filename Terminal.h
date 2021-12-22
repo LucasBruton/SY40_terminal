@@ -35,12 +35,6 @@ typedef struct {
     int espace_portique[2][MAX_CAMION_PORTIQUE];
 } stockage_camion;
 
-// Structure utilisé pour passer des paramètres à un thread camion
-typedef struct {
-    int numEspacePortique;
-    int numVoiePortique;
-} args_camions;
-
 // Structure contenant les conteneurs d'un bateau
 typedef struct {
     pthread_mutex_t mutex;
@@ -66,6 +60,8 @@ typedef struct
     int wagon_emplacement;
     int bateau_emplacement;
     int voie_portique;
+    int attente;
+    int num_attente;
 } message_camion;
 
 typedef struct
@@ -132,6 +128,13 @@ typedef struct
 typedef struct 
 {
     long type;
-}message_creation_retour;
+}message_retour;
+
+typedef struct
+{
+    long type;
+    int voie_portique;
+    int emplacement_portique;
+} message_attente_camion;
 
 #endif

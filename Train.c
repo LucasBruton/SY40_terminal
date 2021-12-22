@@ -18,7 +18,7 @@ void *train(void *arg)
     message_train msg_train;
     message_fin_ordre_superviseur msg_fin_ordre;
     message_portique msg_portique;
-    message_creation_retour msg_creation_retour;
+    message_retour msg_creation_retour;
     msg_fin_ordre.type = 1;
     msg_fin_ordre.type_transport = CONTENEUR_POUR_TRAIN;
     msg_creation_retour.type = 2;
@@ -118,7 +118,7 @@ void *train(void *arg)
     }
     pthread_mutex_unlock(&stock_train->mutex);
 
-    msgsnd(msgid_trains_creation, &msg_creation_retour, sizeof(message_creation_retour) - sizeof(long), 0);
+    msgsnd(msgid_trains_creation, &msg_creation_retour, sizeof(message_retour) - sizeof(long), 0);
 
     while (1)
     {

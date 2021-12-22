@@ -15,7 +15,7 @@ void * portique(void *arg) {
     message_bateau msg_bateau;
     message_camion msg_camion;
     message_train msg_train;
-    message_creation_retour msg_creation_retour;
+    message_retour msg_creation_retour;
     // Creation de la file de messages pour les trains
     if ((cle = ftok(FICHIER_TRAIN, 2)) == -1)
     {
@@ -90,12 +90,13 @@ void * portique(void *arg) {
     msg_bateau.envoie_conteneur = FALSE;
     msg_bateau.type = 1;
     msg_camion.envoie_conteneur = FALSE;
+    msg_camion.attente = FALSE;
     msg_train.envoie_conteneur = FALSE;
     msg_train.type = 1;
     msg_train.voie_portique = num_portique;
     msg_creation_retour.type = 2;
 
-    msgsnd(msgid_portiques_creation, &msg_creation_retour, sizeof(message_creation_retour) - sizeof(long), 0);
+    msgsnd(msgid_portiques_creation, &msg_creation_retour, sizeof(message_retour) - sizeof(long), 0);
 
     while(1) {
         msgrcv(msgid_portiques, &msg_portique, sizeof(message_portique) - sizeof(long), num_portique + 1, 0);

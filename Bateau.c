@@ -21,7 +21,7 @@ void *bateau(void *arg)
     message_bateau msg_bateau;
     message_fin_ordre_superviseur msg_fin_ordre;
     message_portique msg_portique;
-    message_creation_retour msg_creation_retour;
+    message_retour msg_creation_retour;
     msg_fin_ordre.type = 1;
     msg_fin_ordre.type_transport = CONTENEUR_POUR_BATEAU;
     msg_creation_retour.type = 2;
@@ -116,7 +116,7 @@ void *bateau(void *arg)
     memcpy(stock_bateaux->espace_portique, espace_portique, sizeof(int) * 2 * MAX_BATEAU_PORTIQUE);
     pthread_mutex_unlock(&stock_bateaux->mutex);
 
-    msgsnd(msgid_bateaux_creation, &msg_creation_retour, sizeof(message_creation_retour) - sizeof(long), 0);
+    msgsnd(msgid_bateaux_creation, &msg_creation_retour, sizeof(message_retour) - sizeof(long), 0);
 
     while(1) {
         msgrcv(msgid_bateaux, &msg_bateau, sizeof(message_bateau) - sizeof(long), 1, 0);
