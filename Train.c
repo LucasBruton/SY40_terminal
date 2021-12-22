@@ -12,34 +12,17 @@
 void *train(void *arg)
 {
     key_t cle;
-    int shmid_mutex, shmid_trains, shmid_depart, random, msgid_trains, msgid_portiques,
-        msgid_superviseur, conteneurs_trains = 0, train_rempli;
+    int shmid_mutex, shmid_trains, random, msgid_trains, msgid_portiques,
+        msgid_superviseur, conteneurs_trains = 0, train_rempli, msgid_trains_creation;
     stockage_train *stock_train;
-    debut_superviseur *d_superviseur;
     message_train msg_train;
     message_fin_ordre_superviseur msg_fin_ordre;
     message_portique msg_portique;
+    message_creation_retour msg_creation_retour;
     msg_fin_ordre.type = 1;
     msg_fin_ordre.type_transport = CONTENEUR_POUR_TRAIN;
+    msg_creation_retour.type = 2;
     srand(time(NULL));
-
-    // Récupération du segment de mémoire utilisé pour synchronisation du superviseur avec les autres véhicules
-    if ((cle = ftok(FICHIER, 1)) == -1)
-    {
-        printf("Erreur ftok\n");
-        kill(getpid(), SIGINT);
-    }
-    if ((shmid_depart = shmget(cle, 0, 0)) == -1)
-    {
-        printf("Erreur création segment de mémoire pour les camions\n");
-        kill(getpid(), SIGINT);
-    }
-
-    if ((d_superviseur = (debut_superviseur *)shmat(shmid_depart, NULL, 0)) == -1)
-    {
-        printf("Erreur attachement mémoire partagée pour la synchronisation des superviseurs\n");
-        kill(getpid(), SIGINT);
-    }
 
     // Récupération du segment de mémoire pour les trains
     if ((cle = ftok(FICHIER_TRAIN, 1)) == -1)
@@ -67,6 +50,18 @@ void *train(void *arg)
     if ((msgid_trains = msgget(cle, 0)) == -1)
     {
         printf("Erreur création de la file de messages pour les camions\n");
+        kill(getpid(), SIGINT);
+    }
+
+    // Récupération de la file de messages pour la création des trains
+    if ((cle = ftok(FICHIER_TRAIN, 3)) == -1)
+    {
+        printf("Erreur ftok\n");
+        return EXIT_FAILURE;
+    }
+    if ((msgid_trains_creation = msgget(cle, 0)) == -1)
+    {
+        printf("Erreur récupération de la file de messages de la création des trains\n");
         kill(getpid(), SIGINT);
     }
 
@@ -123,11 +118,7 @@ void *train(void *arg)
     }
     pthread_mutex_unlock(&stock_train->mutex);
 
-    // Ajout d'un train aux nombre de trains qui sont prets
-    pthread_mutex_lock(&d_superviseur->mutex);
-    d_superviseur->nb_trains++;
-    pthread_cond_signal(&d_superviseur->attente_vehicules);
-    pthread_mutex_unlock(&d_superviseur->mutex);
+    msgsnd(msgid_trains_creation, &msg_creation_retour, sizeof(message_creation_retour) - sizeof(long), 0);
 
     while (1)
     {
@@ -160,10 +151,6 @@ void *train(void *arg)
             {
                 msg_fin_ordre.plein_conteneurs = TRUE;
                 printf("Le train quitte le terminal de transport\n");
-                pthread_mutex_lock(&d_superviseur->mutex);
-                d_superviseur->nb_trains--;
-                pthread_cond_signal(&d_superviseur->attente_vehicules);
-                pthread_mutex_unlock(&d_superviseur->mutex);
             }
             else
             {

@@ -9,13 +9,13 @@
 #include <sys/types.h>
 #include <sys/msg.h>
 
-int shmid_camions, shmid_bateaux, shmid_trains, shmid_synchronisation,
+int shmid_camions, shmid_bateaux, shmid_trains,
     msgid_camions[2], msgid_trains, msgid_bateaux, msgid_superviseur, msgid_portiques,
-    check_transport[2], check_camion[2], nb_camion_par_portique;
+    check_transport[2], check_camion[2], nb_camion_par_portique, msgid_camions_creation,
+    msgid_bateaux_creation, msgid_trains_creations, msgid_portiques_creations;
 stockage_bateau *stock_bateau;
 stockage_train *stock_train;
 stockage_camion *stock_camion;
-debut_superviseur *d_superviseur;
 
 // Fonction d'arrêt qui est appelé lorsque le programme reçoit un signal SIGINT
 void arret(int signo)
@@ -32,10 +32,6 @@ void arret(int signo)
     if (shmctl(shmid_trains, IPC_RMID, 0) == -1)
     {
         printf("Erreur fermeture du segment de mémoire pour les bateaux\n");
-    }
-    if (shmctl(shmid_synchronisation, IPC_RMID, 0) == -1)
-    {
-        printf("Erreur fermeture du segment de mémoire pour la synchronisation du superviseur avec les autres véhicules\n");
     }
     if (msgctl(msgid_bateaux, IPC_RMID, 0) == -1)
     {
@@ -60,6 +56,22 @@ void arret(int signo)
     if (msgctl(msgid_portiques, IPC_RMID, 0) == -1)
     {
         printf("Erreur fermeture file de messages des portiques\n");
+    }
+    if (msgctl(msgid_bateaux_creation, IPC_RMID, 0) == -1)
+    {
+        printf("Erreur fermeture file de messages de la création des bateaux\n");
+    }
+    if (msgctl(msgid_camions_creation, IPC_RMID, 0) == -1)
+    {
+        printf("Erreur fermeture file de messages de la création des camions\n");
+    }
+    if (msgctl(msgid_trains_creations, IPC_RMID, 0) == -1)
+    {
+        printf("Erreur fermeture file de messages de la création des trains\n");
+    }
+    if (msgctl(msgid_portiques_creations, IPC_RMID, 0) == -1)
+    {
+        printf("Erreur fermeture file de messages de la création des portiques\n");
     }
     printf("Fin de l'exécution du terminal...\n");
     exit(0);
@@ -193,7 +205,7 @@ int deplacerConteneurCamion(int portique)
     pthread_mutex_lock(&stock_camion->mutex);
     for (int i = 0; i < stock_camion->nb_camion_par_portique; ++i)
     {
-        conteneur = stock_camion->espace_portique[portique][i];
+        conteneur = stock_camion->espace_portique[portique][check_camion[portique]];
         if (conteneur == CONTENEUR_POUR_BATEAU)
         {
             pthread_mutex_lock(&stock_bateau->mutex);
@@ -202,10 +214,11 @@ int deplacerConteneurCamion(int portique)
                 destination = stock_bateau->espace_portique[portique][j];
                 if (destination == ESPACE_CONTENEUR_VIDE)
                 {
-                    envoi.type = i+1;
+                    envoi.type = check_camion[portique] + 1;
                     envoi.desinataire = CONTENEUR_POUR_BATEAU;
                     envoi.bateau_emplacement = j;
                     msgsnd(msgid_camions[portique], &envoi, sizeof(message_camion) - sizeof(long), 0);
+                    check_camion[portique] = (check_camion[portique] + 1) % stock_camion->nb_camion_par_portique;
                     pthread_mutex_unlock(&stock_bateau->mutex);
                     pthread_mutex_unlock(&stock_camion->mutex);
                     return TRUE;
@@ -223,11 +236,12 @@ int deplacerConteneurCamion(int portique)
                     destination = stock_train->espace_portique[portique][j][k];
                     if (destination == ESPACE_CONTENEUR_VIDE)
                     {
-                        envoi.type = i+1;
+                        envoi.type = check_camion[portique] + 1;
                         envoi.train_wagon = j;
                         envoi.wagon_emplacement = k;
                         envoi.desinataire = CONTENEUR_POUR_TRAIN;
                         msgsnd(msgid_camions[portique], &envoi, sizeof(message_camion) - sizeof(long), 0);
+                        check_camion[portique] = (check_camion[portique] + 1) % stock_camion->nb_camion_par_portique;
                         pthread_mutex_unlock(&stock_train->mutex);
                         pthread_mutex_unlock(&stock_camion->mutex);
                         return TRUE;
@@ -236,6 +250,7 @@ int deplacerConteneurCamion(int portique)
             }
             pthread_mutex_unlock(&stock_train->mutex);
         }
+        check_camion[portique] = (check_camion[portique] + 1) % stock_camion->nb_camion_par_portique;
     }
     pthread_mutex_unlock(&stock_camion->mutex);
 
@@ -308,26 +323,19 @@ void printConteneursVehicules()
     pthread_mutex_unlock(&stock_train->mutex);
 }
 
-void synchronisationCreationVehicules() {
-    // Attente de l'initialisation des véhicules
-    pthread_mutex_lock(&d_superviseur->mutex);
-    while (d_superviseur->nb_trains < 1 || d_superviseur->nb_bateaux < 1 || d_superviseur->nb_camions < 2 * nb_camion_par_portique || d_superviseur->nb_portiques < 2)
-    {
-        pthread_cond_wait(&d_superviseur->attente_vehicules, &d_superviseur->mutex);
-    }
-    pthread_mutex_unlock(&d_superviseur->mutex);
-}
-
 int main(int argc, char const *argv[])
 {
     pthread_t num_thread;
-    int nb_conteneurs_par_partie_du_bateau, nb_wagon_par_partie_du_train, nb_conteneurs_par_wagon;
+    int nb_conteneurs_par_partie_du_bateau, nb_wagon_par_partie_du_train, 
+    nb_camion_attente, nb_conteneurs_par_wagon;
     key_t cle;
     args_camions a_camion[2][MAX_CAMION_PORTIQUE];
     pthread_condattr_t cattr;
     pthread_mutexattr_t mattr;
-    pthread_t id_bateau, id_portique[2], id_camion[2][MAX_CAMION_PORTIQUE], id_train, id_ordre_superviseur[2];
+    pthread_t id_bateau, id_portique[2], id_camion, id_train, id_ordre_superviseur[2];
     message_fin_ordre_superviseur msg_fin_ordre;
+    message_creation_camion msg_creation_camion;
+    message_creation_retour msg_creation_retour;
 
     pthread_condattr_init(&cattr);
     pthread_mutexattr_init(&mattr);
@@ -335,22 +343,28 @@ int main(int argc, char const *argv[])
     pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED);
 
     // Vérification du nombre d'arguments passés
-    if (argc < 5)
+    if (argc < 6)
     {
-        printf("Usage: %s <nbCamionParPortique> <nbConteneursParPartieDuBateau> <nbWagonsParPartieDuTrain> <nbConteneursParWagon>\n", argv[0]);
+        printf("Usage: %s <nbCamionParPortique> <nbCamionsAttente> <nbConteneursParPartieDuBateau> <nbWagonsParPartieDuTrain> <nbConteneursParWagon>\n", argv[0]);
         return EXIT_FAILURE;
     }
     signal(SIGINT, arret);
 
     nb_camion_par_portique = atoi(argv[1]);
-    nb_conteneurs_par_partie_du_bateau = atoi(argv[2]);
-    nb_wagon_par_partie_du_train = atoi(argv[3]);
-    nb_conteneurs_par_wagon = atoi(argv[4]);
+    nb_camion_attente = atoi(argv[2]);
+    nb_conteneurs_par_partie_du_bateau = atoi(argv[3]);
+    nb_wagon_par_partie_du_train = atoi(argv[4]);
+    nb_conteneurs_par_wagon = atoi(argv[5]);
 
     // Vérification des valeurs données en arguments
     if (nb_camion_par_portique <= 0 || nb_camion_par_portique > MAX_CAMION_PORTIQUE)
     {
         printf("Erreur: l'argument <nbCamionParPortique> doit être compris entre 1 et %d\n", MAX_CAMION_PORTIQUE);
+        return EXIT_FAILURE;
+    }
+    if (nb_camion_attente <= 0 || nb_camion_attente > MAX_CAMION_ATTENTE)
+    {
+        printf("Erreur: l'argument <nbCamionsAttente> doit être compris entre 1 et %d\n", MAX_CAMION_ATTENTE);
         return EXIT_FAILURE;
     }
     if (nb_conteneurs_par_partie_du_bateau <= 0 || nb_conteneurs_par_partie_du_bateau > MAX_BATEAU_PORTIQUE)
@@ -415,6 +429,18 @@ int main(int argc, char const *argv[])
         kill(getpid(), SIGINT);
     }
 
+    // Creation de la file de messages pour la création des camions
+    if ((cle = ftok(FICHIER_CAMION, 4)) == -1)
+    {
+        printf("Erreur ftok\n");
+        return EXIT_FAILURE;
+    }
+    if ((msgid_camions_creation = msgget(cle, IPC_CREAT | 0666)) == -1)
+    {
+        printf("Erreur création de la file de messages de la création des camions\n");
+        kill(getpid(), SIGINT);
+    }
+
     // Creation du segment de mémoire pour les bateaux
     if ((cle = ftok(FICHIER_BATEAU, 1)) == -1)
     {
@@ -446,6 +472,18 @@ int main(int argc, char const *argv[])
     if ((msgid_bateaux = msgget(cle, IPC_CREAT | 0666)) == -1)
     {
         printf("Erreur création de la file de messages pour les camions\n");
+        kill(getpid(), SIGINT);
+    }
+
+    // Creation de la file de messages pour la création des bateaux
+    if ((cle = ftok(FICHIER_BATEAU, 3)) == -1)
+    {
+        printf("Erreur ftok\n");
+        return EXIT_FAILURE;
+    }
+    if ((msgid_bateaux_creation = msgget(cle, IPC_CREAT | 0666)) == -1)
+    {
+        printf("Erreur création de la file de messages de la création des bateaux\n");
         kill(getpid(), SIGINT);
     }
 
@@ -487,26 +525,17 @@ int main(int argc, char const *argv[])
         kill(getpid(), SIGINT);
     }
 
-    // Creation du segment de mémoire pour la synchronisation du superviseur avec les autres véhicules
-    if ((cle = ftok(FICHIER, 1)) == -1)
+    // Creation de la file de messages pour la création des camions
+    if ((cle = ftok(FICHIER_TRAIN, 3)) == -1)
     {
         printf("Erreur ftok\n");
         return EXIT_FAILURE;
     }
-    if ((shmid_synchronisation = shmget(cle, sizeof(debut_superviseur), IPC_CREAT | 0666)) == -1)
+    if ((msgid_trains_creations = msgget(cle, IPC_CREAT | 0666)) == -1)
     {
-        printf("Erreur création segment de mémoire pour les camions\n");
+        printf("Erreur création de la file de messages de la création des trains\n");
         kill(getpid(), SIGINT);
     }
-
-    // Initialisation du segment de mémoire pour la synchronisation du superviseur avec les autres véhicules
-    d_superviseur = (debut_superviseur *)shmat(shmid_synchronisation, NULL, 0);
-    d_superviseur->nb_bateaux = 0;
-    d_superviseur->nb_trains = 0;
-    d_superviseur->nb_camions = 0;
-    d_superviseur->nb_portiques = 0;
-    pthread_cond_init(&d_superviseur->attente_vehicules, &cattr);
-    pthread_mutex_init(&d_superviseur->mutex, &mattr);
 
     // Creation de la file de messages pour le superviseur
     if ((cle = ftok(FICHIER, 2)) == -1)
@@ -528,34 +557,56 @@ int main(int argc, char const *argv[])
     }
     if ((msgid_portiques = msgget(cle, IPC_CREAT | 0666)) == -1)
     {
-        printf("Erreur création de la file de messages pour les camions\n");
+        printf("Erreur création de la file de messages pour les portiques\n");
+        kill(getpid(), SIGINT);
+    }
+
+    // Creation de la file de messages pour la création des portiques
+    if ((cle = ftok(FICHIER_PORTIQUE, 2)) == -1)
+    {
+        printf("Erreur ftok\n");
+        return EXIT_FAILURE;
+    }
+    if ((msgid_portiques_creations = msgget(cle, IPC_CREAT | 0666)) == -1)
+    {
+        printf("Erreur création de la file de messages de créations des portiques\n");
         kill(getpid(), SIGINT);
     }
 
     // Création des threads des véhicules
     pthread_create(&id_bateau, NULL, bateau, NULL);
+    msgrcv(msgid_bateaux_creation, &msg_creation_retour, sizeof(message_creation_retour) - sizeof(long), 2, 0);
     pthread_create(&id_portique[0], NULL, portique, (void *)0);
     pthread_create(&id_portique[1], NULL, portique, (void *)1);
+    msgrcv(msgid_portiques_creations, &msg_creation_retour, sizeof(message_creation_retour) - sizeof(long), 2, 0);
+    msgrcv(msgid_portiques_creations, &msg_creation_retour, sizeof(message_creation_retour) - sizeof(long), 2, 0);
     pthread_create(&id_train, NULL, train, NULL);
+    msgrcv(msgid_trains_creations, &msg_creation_retour, sizeof(message_creation_retour) - sizeof(long), 2, 0);
+
+    msg_creation_camion.type = 1;
+    msg_creation_camion.attente = FALSE;
 
     // Création des threads camions
     for (int i = 0; i < 2; ++i)
     {
+        msg_creation_camion.voie_portique = i;
         for (int j = 0; j < nb_camion_par_portique; ++j)
         {
-            a_camion[i][j].numVoiePortique = i;
-            a_camion[i][j].numEspacePortique = j;
-            pthread_create(&id_camion[i][j], NULL, camion, (void *)&a_camion[i][j]);
+            
+            msg_creation_camion.emplacement_portique = j;
+            pthread_create(&id_camion, NULL, camion, NULL);
+            msgsnd(msgid_camions_creation, &msg_creation_camion, sizeof(message_creation_camion) - sizeof(long), 0);
+            msgrcv(msgid_camions_creation, &msg_creation_retour, sizeof(message_creation_retour) - sizeof(long), 2, 0);
         }
     }
 
     // Initialisation des variables globales check_transport et check_camion
-    check_transport[0] = 2;
-    check_transport[1] = 2;
+    check_transport[0] = 0;
+    check_transport[1] = 0;
     check_camion[0] = 0;
     check_camion[1] = 0;
 
-    synchronisationCreationVehicules();
+    // synchronisationCreationVehicules();
     printConteneursVehicules();
 
     // Lancement du superviseur qui peut envoyer jusqu'à deux ordre à la fois: un par portique
@@ -568,20 +619,23 @@ int main(int argc, char const *argv[])
             if(msg_fin_ordre.plein_conteneurs == TRUE) {
                 if(msg_fin_ordre.type_transport == CONTENEUR_POUR_CAMION) {
                     printf("Création nouveau camion sur la voie %d à l'emplacement %d\n", msg_fin_ordre.camion_voie_portique, msg_fin_ordre.camion_emplacement);
-                    a_camion[msg_fin_ordre.camion_voie_portique][msg_fin_ordre.camion_emplacement].numVoiePortique = msg_fin_ordre.camion_voie_portique;
-                    a_camion[msg_fin_ordre.camion_voie_portique][msg_fin_ordre.camion_emplacement].numEspacePortique = msg_fin_ordre.camion_emplacement;
-                    pthread_create(&id_camion[msg_fin_ordre.camion_voie_portique][msg_fin_ordre.camion_emplacement], NULL, camion, (void *)&a_camion[msg_fin_ordre.camion_voie_portique][msg_fin_ordre.camion_emplacement]);
+                    msg_creation_camion.voie_portique = msg_fin_ordre.camion_voie_portique;
+                    msg_creation_camion.emplacement_portique = msg_fin_ordre.camion_emplacement;
+                    pthread_create(&id_camion, NULL, camion, NULL);
+                    msgsnd(msgid_camions_creation, &msg_creation_camion, sizeof(message_creation_camion) - sizeof(long), 0);
+                    msgrcv(msgid_camions_creation, &msg_creation_retour, sizeof(message_creation_retour) - sizeof(long), 2, 0);
                 }else if (msg_fin_ordre.type_transport == CONTENEUR_POUR_TRAIN) {
                     printf("Création d'un nouveau train\n");
                     pthread_create(&id_train, NULL, train, NULL);
-                }else if (msg_fin_ordre.type_transport == CONTENEUR_POUR_TRAIN) {
+                    msgrcv(msgid_trains_creations, &msg_creation_retour, sizeof(message_creation_retour) - sizeof(long), 2, 0);
+                }else if (msg_fin_ordre.type_transport == CONTENEUR_POUR_BATEAU) {
                     printf("Création d'un nouveau bateau\n");
                     pthread_create(&id_bateau, NULL, bateau, NULL);
+                    msgrcv(msgid_bateaux_creation, &msg_creation_retour, sizeof(message_creation_retour) - sizeof(long), 2, 0);
                 }
             }
             
         }
-        synchronisationCreationVehicules();
 
         printConteneursVehicules();
         // sleep(2);

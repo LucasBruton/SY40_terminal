@@ -9,12 +9,13 @@
 
 void * portique(void *arg) {
     key_t cle;
-    int num_portique = (int)arg, msgid_trains, msgid_bateaux, msgid_camions[2], msgid_portiques, shmid_depart;
-    debut_superviseur *d_superviseur;
+    int num_portique = (int)arg, msgid_trains, msgid_bateaux, msgid_camions[2],
+        msgid_portiques, shmid_depart, msgid_portiques_creation;
     message_portique msg_portique;
     message_bateau msg_bateau;
     message_camion msg_camion;
     message_train msg_train;
+    message_creation_retour msg_creation_retour;
     // Creation de la file de messages pour les trains
     if ((cle = ftok(FICHIER_TRAIN, 2)) == -1)
     {
@@ -73,28 +74,17 @@ void * portique(void *arg) {
         kill(getpid(), SIGINT);
     }
 
-    // Récupération du segment de mémoire utilisé pour synchronisation du superviseur avec les autres véhicules
-    if ((cle = ftok(FICHIER, 1)) == -1)
+    // Récupération de la file de messages pour la création des camions
+    if ((cle = ftok(FICHIER_PORTIQUE, 2)) == -1)
     {
         printf("Erreur ftok\n");
         kill(getpid(), SIGINT);
     }
-    if ((shmid_depart = shmget(cle, 0, 0)) == -1)
+    if ((msgid_portiques_creation = msgget(cle, 0)) == -1)
     {
-        printf("Erreur récupération segment de mémoire pour la synchronisation\n");
+        printf("Erreur récupération de la file de messages de la création des portiques\n");
         kill(getpid(), SIGINT);
     }
-
-    if ((d_superviseur = (debut_superviseur *)shmat(shmid_depart, NULL, 0)) == -1)
-    {
-        printf("Erreur attachement mémoire partagée pour la structure des mutexs\n");
-        kill(getpid(), SIGINT);
-    }
-
-    pthread_mutex_lock(&d_superviseur->mutex);
-    d_superviseur->nb_portiques++;
-    pthread_cond_signal(&d_superviseur->attente_vehicules);
-    pthread_mutex_unlock(&d_superviseur->mutex);
 
     msg_bateau.voie_portique = num_portique;
     msg_bateau.envoie_conteneur = FALSE;
@@ -103,7 +93,10 @@ void * portique(void *arg) {
     msg_train.envoie_conteneur = FALSE;
     msg_train.type = 1;
     msg_train.voie_portique = num_portique;
-    
+    msg_creation_retour.type = 2;
+
+    msgsnd(msgid_portiques_creation, &msg_creation_retour, sizeof(message_creation_retour) - sizeof(long), 0);
+
     while(1) {
         msgrcv(msgid_portiques, &msg_portique, sizeof(message_portique) - sizeof(long), num_portique + 1, 0);
         printf("Portique %d: destination: %d\n", num_portique, msg_portique.destinataire);

@@ -2,6 +2,7 @@
 #define TERMINALE_H
 
 #define MAX_CAMION_PORTIQUE 50
+#define MAX_CAMION_ATTENTE 100
 #define MAX_BATEAU_PORTIQUE 50
 #define MAX_WAGON_TRAIN 5
 #define MAX_CONTENEURS_WAGON 50
@@ -55,16 +56,6 @@ typedef struct
     int nb_wagon_par_partie_du_train;
     int espace_portique[2][MAX_WAGON_TRAIN][MAX_CONTENEURS_WAGON];
 } stockage_train;
-
-// Structure utilisée pour la synchronisation du superviseur avec les autres véhicules à l'initialisation du terminal de transport
-typedef struct {
-    int nb_camions;
-    int nb_bateaux;
-    int nb_trains;
-    int nb_portiques;
-    pthread_cond_t attente_vehicules;
-    pthread_mutex_t mutex;
-} debut_superviseur;
 
 typedef struct
 {
@@ -129,5 +120,18 @@ typedef struct
     int camion_emplacement;
 } message_fin_ordre_superviseur;
 
+typedef struct 
+{
+    long type;
+    int voie_portique;
+    int emplacement_portique;
+    int attente;
+    int num_attente;
+} message_creation_camion;
+
+typedef struct 
+{
+    long type;
+}message_creation_retour;
 
 #endif
