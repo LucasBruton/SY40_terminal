@@ -10,7 +10,7 @@
 void * portique(void *arg) {
     key_t cle;
     int num_portique = (int)arg, msgid_trains, msgid_bateaux, msgid_camions[2],
-        msgid_portiques, shmid_depart, msgid_portiques_creation;
+        msgid_portiques, msgid_portiques_creation;
     message_portique msg_portique;
     message_bateau msg_bateau;
     message_camion msg_camion;
