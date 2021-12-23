@@ -4,7 +4,6 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <pthread.h>
-#include <time.h>
 #include <sys/types.h>
 #include <signal.h>
 #include <unistd.h>
@@ -28,7 +27,7 @@ void *camion(void *arg) {
     msg_fin_ordre.type = 1;
     msg_fin_ordre.type_transport = CONTENEUR_POUR_CAMION;
 
-    srand(time(NULL));
+    srand(&cle);
 
     // Récupération du segment de mémoire pour les camions
     if ((cle = ftok(FICHIER_CAMION, 1)) == -1)

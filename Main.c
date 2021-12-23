@@ -88,6 +88,12 @@ void arret(int signo)
     exit(0);
 }
 
+
+/*
+Fonction permettant de déplacer un conteneur du bateau auprès d'un autre transport
+int portique: numéro du portique qui va déplacer le conteneur du bateau
+retour int: TRUE si la fonction a déplacé un conteneur, sinon FALSE
+*/
 int deplacerConteneurBateau(int portique)
 {
     message_bateau envoi;
@@ -96,21 +102,27 @@ int deplacerConteneurBateau(int portique)
     envoi.voie_portique = portique;
     envoi.type = 1;
 
+    // Parcours les emplacement de conteneurs accessibles sur la voie précisé par la variable portique
     pthread_mutex_lock(&stock_bateau->mutex);
     for (int i = 0; i < stock_bateau->nb_conteneurs_par_partie_du_bateau; ++i)
     {
         conteneur = stock_bateau->espace_portique[portique][i];
+        // Si le conteneur est destiné à un camion, on tente de l'envoyer
         if (conteneur == CONTENEUR_POUR_CAMION)
         {
+            // On regarde si un camion est vide
+            // On parcours les camions accessibles sur la voie précisé par la variable portique
             pthread_mutex_lock(&stock_camion->mutex);
             for (int j = 0; j < stock_camion->nb_camion_par_portique; ++j)
             {
                 destination = stock_camion->espace_portique[portique][j];
+                // Si un camion est vide, on indique au bateau d'envoyer le conteneur au camion vide
                 if (destination == ESPACE_CONTENEUR_VIDE)
                 {
                     envoi.destinataire = CONTENEUR_POUR_CAMION;
                     envoi.camion_destinataire = j+1;
                     envoi.emplacement_conteneur = i;
+                    // Message indiquant au bateau d'envoyer le conteneur au camion vide
                     msgsnd(msgid_bateaux, &envoi, sizeof(message_bateau) - sizeof(long), 0);
                     pthread_mutex_unlock(&stock_bateau->mutex);
                     pthread_mutex_unlock(&stock_camion->mutex);
@@ -118,21 +130,26 @@ int deplacerConteneurBateau(int portique)
                 }
             }
             pthread_mutex_unlock(&stock_camion->mutex);
-        }
+        } // Si le conteneur est destiné à un train, on tente de lui envoyer
         else if (conteneur == CONTENEUR_POUR_TRAIN)
         {
+            // On vérifie que le train est un emplacement de conteneur vide
+            // Parcours des wagons accessibles sur la voie précisé par la variable portique
             pthread_mutex_lock(&stock_train->mutex);
             for (int j = 0; j < stock_train->nb_wagon_par_partie_du_train; ++j)
             {
+                // Parcours des emplacements de conteneur du wagon
                 for (int k = 0; k < stock_train->nb_conteneurs_par_wagon; ++k)
                 {
                     destination = stock_train->espace_portique[portique][j][k];
+                    // Si l'emplacement du wagon est vide, on lui envoit le conteneur
                     if (destination == ESPACE_CONTENEUR_VIDE)
                     {
                         envoi.destinataire = CONTENEUR_POUR_TRAIN;
                         envoi.emplacement_conteneur = i;
                         envoi.train_wagon = j;
                         envoi.wagon_emplacement = k;
+                        // message indiquant au bateau d'envoyer le conteneur à l'emplacement vide du train
                         msgsnd(msgid_bateaux, &envoi, sizeof(message_bateau) - sizeof(long), 0);
                         pthread_mutex_unlock(&stock_train->mutex);
                         pthread_mutex_unlock(&stock_bateau->mutex);
@@ -148,6 +165,11 @@ int deplacerConteneurBateau(int portique)
     return FALSE;
 }
 
+/*
+Fonction permettant de déplacer un conteneur du train auprès d'un autre transport
+int portique: numéro du portique qui va déplacer le conteneur du train
+retour int: TRUE si la fonction a déplacé un conteneur, sinon FALSE
+*/
 int deplacerConteneurTrain(int portique)
 {
     message_train envoi;
@@ -155,23 +177,29 @@ int deplacerConteneurTrain(int portique)
     envoi.envoie_conteneur = TRUE;
     envoi.type = 1;
     envoi.voie_portique = portique;
+    // Parcours les wagons accessibles sur la voie précisé par la variable portique
     pthread_mutex_lock(&stock_train->mutex);
     for (int i = 0; i < stock_train->nb_wagon_par_partie_du_train; ++i)
     {
+        // Parcours les emplacements de conteneurs du wagon
         for (int j = 0; j < stock_train->nb_conteneurs_par_wagon; ++j) {
             conteneur = stock_train->espace_portique[portique][i][j];
+            // Si le conteneur est destiné au bateau, on tente de lui envoyer 
             if (conteneur == CONTENEUR_POUR_BATEAU)
             {
+                // On vérifie que le bateau est un emplacement vide
                 pthread_mutex_lock(&stock_bateau->mutex);
                 for (int k = 0; k < stock_bateau->nb_conteneurs_par_partie_du_bateau; ++k)
                 {
                     destination = stock_bateau->espace_portique[portique][k];
+                    // Si le bateau à un emplacement libre, on indique au train d'envoyer le conteneur à l'emplacement libre du bateau
                     if (destination == ESPACE_CONTENEUR_VIDE)
                     {
                         envoi.wagon = i;
                         envoi.wagon_emplacement = j;
                         envoi.bateau_emplacement = k;
                         envoi.destinataire = CONTENEUR_POUR_BATEAU;
+                        // Message indiquant au train d'envoyer le conteneur à l'emplacement libre du bateau
                         msgsnd(msgid_trains, &envoi, sizeof(message_train) - sizeof(long), 0);
                         pthread_mutex_unlock(&stock_bateau->mutex);
                         pthread_mutex_unlock(&stock_train->mutex);
@@ -179,19 +207,23 @@ int deplacerConteneurTrain(int portique)
                     }
                 }
                 pthread_mutex_unlock(&stock_bateau->mutex);
-            }
+            } // Si le conteneur est destiné à un camion, on tente de l'envoyer'
             else if (conteneur == CONTENEUR_POUR_CAMION)
             {
+                // On essaye de trouver un camion vide
+                // parcours des camions accessibles sur la voie précisé par la variable portique
                 pthread_mutex_lock(&stock_camion->mutex);
                 for (int k = 0; k < stock_camion->nb_camion_par_portique; ++k)
                 {
                     destination = stock_camion->espace_portique[portique][k];
+                    // Si le camion est vide, on indique au train d'envoyer le conteneur au camion
                     if (destination == ESPACE_CONTENEUR_VIDE)
                     {
                         envoi.wagon = i;
                         envoi.wagon_emplacement = j;
                         envoi.destinataire = CONTENEUR_POUR_CAMION;
                         envoi.camion_destinataire = k+1;
+                        // Message indiquant au train d'envoyer le conteneur au camion
                         msgsnd(msgid_trains, &envoi, sizeof(message_train) - sizeof(long), 0);
                         pthread_mutex_unlock(&stock_train->mutex);
                         pthread_mutex_unlock(&stock_camion->mutex);
@@ -207,6 +239,11 @@ int deplacerConteneurTrain(int portique)
     return FALSE;
 }
 
+/*
+Fonction permettant de déplacer un conteneur d'un camion auprès d'un autre transport
+int portique: numéro du portique qui va déplacer le conteneur du camion
+retour int: TRUE si la fonction a déplacé un conteneur, sinon FALSE
+*/
 int deplacerConteneurCamion(int portique)
 {
     message_camion envoi;
@@ -216,16 +253,20 @@ int deplacerConteneurCamion(int portique)
     envoi.attente = FALSE;
     msg_attente.endormir_camion = TRUE;
     int conteneur, destination;
+    // Parcours les camions accessibles sur la voie précisé par la variable portique
     pthread_mutex_lock(&stock_camion->mutex);
     for (int i = 0; i < stock_camion->nb_camion_par_portique; ++i)
     {
         conteneur = stock_camion->espace_portique[portique][check_camion[portique]];
+        // Si le conteneur est destiné au bateau, on tente de lui envoyer
         if (conteneur == CONTENEUR_POUR_BATEAU)
         {
+            // Parcours les emplacement de conteneurs accessibles sur la voie précisé par la variable portique
             pthread_mutex_lock(&stock_bateau->mutex);
             for (int j = 0; j < stock_bateau->nb_conteneurs_par_partie_du_bateau; ++j)
             {
                 destination = stock_bateau->espace_portique[portique][j];
+                // Si le bateau à un emplacement libre, on indique au camion d'envoyer le conteneur à l'emplacement libre du bateau
                 if (destination == ESPACE_CONTENEUR_VIDE)
                 {
                     envoi.type = check_camion[portique] + 1;
@@ -239,14 +280,17 @@ int deplacerConteneurCamion(int portique)
                 }
             }
             pthread_mutex_unlock(&stock_bateau->mutex);
-        }
+        } // Si le conteneur est destiné au train, on tente de lui envoyer
         else if (conteneur == CONTENEUR_POUR_TRAIN)
         {
-            pthread_mutex_lock(&stock_train->mutex);
+            // On vérifie que le train est un emplacement de conteneur vide
+            // Parcours des wagons accessibles sur la voie précisé par la variable portique            pthread_mutex_lock(&stock_train->mutex);
             for (int j = 0; j < stock_train->nb_wagon_par_partie_du_train; ++j)
             {
+                // Parcours des emplacements de conteneur du wagon
                 for (int k = 0; k < stock_train->nb_conteneurs_par_wagon; ++k)
                 {
+                    // Si l'emplacement du wagon est vide, on lui envoit le conteneur
                     destination = stock_train->espace_portique[portique][j][k];
                     if (destination == ESPACE_CONTENEUR_VIDE)
                     {
@@ -254,6 +298,7 @@ int deplacerConteneurCamion(int portique)
                         envoi.train_wagon = j;
                         envoi.wagon_emplacement = k;
                         envoi.desinataire = CONTENEUR_POUR_TRAIN;
+                        // message indiquant au camion d'envoyer le conteneur à l'emplacement vide du train
                         msgsnd(msgid_camions[portique], &envoi, sizeof(message_camion) - sizeof(long), 0);
                         check_camion[portique] = (check_camion[portique] + 1) % stock_camion->nb_camion_par_portique;
                         pthread_mutex_unlock(&stock_train->mutex);
@@ -263,25 +308,29 @@ int deplacerConteneurCamion(int portique)
                 }
             }
             pthread_mutex_unlock(&stock_train->mutex);
-        }else {
-            rotation_camions[portique][check_camion[portique]]++;
-            printf("Rotation: %d %d->%d\n", portique, check_camion[portique], rotation_camions[portique][check_camion[portique]]);
-
-            if (rotation_camions[portique][check_camion[portique]] == nb_camion_attente)
-            {
-                pthread_mutex_lock(&mutex_prochain_camion);
-                printf("Rotation: %d %d\n", portique, check_camion[portique]);
-                rotation_camions[portique][check_camion[portique]] = 0;
-                msg_attente.type = prochain_camion_attente;
-                msg_attente.voie_portique = portique;
-                msg_attente.emplacement_portique = check_camion[portique];
-                msgsnd(msgid_camions_attente, &msg_attente, sizeof(message_attente_camion) - sizeof(long), NULL);
-                printf("Fin rotation %d\n", prochain_camion_attente);
-                prochain_camion_attente = prochain_camion_attente%nb_camion_attente + 1;
-                pthread_mutex_unlock(&mutex_prochain_camion);
-                pthread_mutex_unlock(&stock_camion->mutex);
-                return TRUE;
-            }
+        }
+        /* 
+        Si le camion n'a pu déplacer son conteneur ou qu'il est vide,
+        on incrémente le rotations_camions du camion.
+        Si rotaions_camions du camionest égale au nombre de camions qui attendent, 
+        on dit à un camion de la file d'attente de remplacer le camion qui
+        vient d'être examiné.
+        */
+        rotation_camions[portique][check_camion[portique]]++;
+        if (rotation_camions[portique][check_camion[portique]] == nb_camion_attente)
+        {
+            pthread_mutex_lock(&mutex_prochain_camion);
+            printf("\nEchange du camion sur la voie %d à l'emplacement %d avec le camion attendant au numéro %d de la file d'attente\n", portique, check_camion[portique], prochain_camion_attente);
+            rotation_camions[portique][check_camion[portique]] = 0;
+            msg_attente.type = prochain_camion_attente;
+            msg_attente.voie_portique = portique;
+            msg_attente.emplacement_portique = check_camion[portique];
+            // On envoie un message au camion attendant au numéro prochain_camion_attente
+            msgsnd(msgid_camions_attente, &msg_attente, sizeof(message_attente_camion) - sizeof(long), NULL);
+            prochain_camion_attente = prochain_camion_attente%nb_camion_attente + 1;
+            pthread_mutex_unlock(&mutex_prochain_camion);
+            pthread_mutex_unlock(&stock_camion->mutex);
+            return TRUE;
         }
         check_camion[portique] = (check_camion[portique] + 1) % stock_camion->nb_camion_par_portique;
     }
@@ -290,7 +339,11 @@ int deplacerConteneurCamion(int portique)
     return FALSE;
 }
 
-// Correspond à un ordre du spuerviseur
+/*
+Cette fonction va essayé de déplacé un conteneur d'un des véhicules en utilisant les 
+fonctions précédentes.
+void *arg: numéro du portique que la fonction va utiliser
+*/ 
 void envoieOrdreVehicule(void *arg)
 {
     int portique = (int)arg;
@@ -299,18 +352,16 @@ void envoieOrdreVehicule(void *arg)
     {
         if (check_transport[portique] == 0) {
             retour_superviseur[portique] = deplacerConteneurBateau(portique);
-            printf("Superviseur %d: check bateau -> %d\n", portique, retour_superviseur[portique]);
         }else if (check_transport[portique] == 1) {
             retour_superviseur[portique] = deplacerConteneurTrain(portique);
-            printf("Superviseur %d: check train -> %d\n", portique, retour_superviseur[portique]);
         }else {
             retour_superviseur[portique] = deplacerConteneurCamion(portique);
-            printf("Superviseur %d: check camion -> %d\n", portique, retour_superviseur[portique]);
         }
         check_transport[portique] = (check_transport[portique] + 1)%3;
     }
 }
 
+// Cette fonction print les conteneurs des véhicules qui sont traités par les portiques
 void printConteneursVehicules()
 {
     int i, j, k;
@@ -381,7 +432,7 @@ int main(int argc, char const *argv[])
         return EXIT_FAILURE;
     }
     signal(SIGINT, arret);
-
+    // On assigne les arguments a des int
     nb_camion_par_portique = atoi(argv[1]);
     nb_camion_attente = atoi(argv[2]);
     nb_conteneurs_par_partie_du_bateau = atoi(argv[3]);
@@ -394,9 +445,9 @@ int main(int argc, char const *argv[])
         printf("Erreur: l'argument <nbCamionParPortique> doit être compris entre 1 et %d\n", MAX_CAMION_PORTIQUE);
         return EXIT_FAILURE;
     }
-    if (nb_camion_attente <= 0 || nb_camion_attente > MAX_CAMION_ATTENTE)
+    if (nb_camion_attente <= 1 || nb_camion_attente > MAX_CAMION_ATTENTE)
     {
-        printf("Erreur: l'argument <nbCamionsAttente> doit être compris entre 1 et %d\n", MAX_CAMION_ATTENTE);
+        printf("Erreur: l'argument <nbCamionsAttente> doit être compris entre 2 et %d\n", MAX_CAMION_ATTENTE);
         return EXIT_FAILURE;
     }
     if (nb_conteneurs_par_partie_du_bateau <= 0 || nb_conteneurs_par_partie_du_bateau > MAX_BATEAU_PORTIQUE)
@@ -629,20 +680,23 @@ int main(int argc, char const *argv[])
         kill(getpid(), SIGINT);
     }
 
-    // Création des threads des véhicules
+    // Création des threads du bateau, du train et des portiques
     pthread_create(&id_bateau, NULL, bateau, NULL);
+    // Réception d'un message de confirmation de l'initialisation du véhicule
     msgrcv(msgid_bateaux_creation, &msg_creation_retour, sizeof(message_retour) - sizeof(long), 2, 0);
     pthread_create(&id_portique[0], NULL, portique, (void *)0);
     pthread_create(&id_portique[1], NULL, portique, (void *)1);
+    // Réception d'un message de confirmation de l'initialisation du véhicule
     msgrcv(msgid_portiques_creations, &msg_creation_retour, sizeof(message_retour) - sizeof(long), 2, 0);
     msgrcv(msgid_portiques_creations, &msg_creation_retour, sizeof(message_retour) - sizeof(long), 2, 0);
     pthread_create(&id_train, NULL, train, NULL);
+    // Réception d'un message de confirmation de l'initialisation du véhicule
     msgrcv(msgid_trains_creations, &msg_creation_retour, sizeof(message_retour) - sizeof(long), 2, 0);
 
     msg_creation_camion.type = 1;
     msg_creation_camion.attente = FALSE;
 
-    // Création des threads camions
+    // Création des threads des camions qui vont être traiter par les portiques
     for (int i = 0; i < 2; ++i)
     {
         msg_creation_camion.voie_portique = i;
@@ -651,17 +705,22 @@ int main(int argc, char const *argv[])
             
             msg_creation_camion.emplacement_portique = j;
             pthread_create(&id_camion, NULL, camion, NULL);
+            // Envoie de paramètres au camion créé
             msgsnd(msgid_camions_creation, &msg_creation_camion, sizeof(message_creation_camion) - sizeof(long), 0);
+            // Réception d'un message de confirmation de l'initialisation du véhicule
             msgrcv(msgid_camions_creation, &msg_creation_retour, sizeof(message_retour) - sizeof(long), 2, 0);
             rotation_camions[i][j] = 0;
         }
     }
 
+    // Création des camions qui attendant dans la file d'attente des camions
     msg_creation_camion.attente = TRUE;
     for(int i = 0; i<nb_camion_attente; ++i) {
         msg_creation_camion.num_attente = i+1;
         pthread_create(&id_camion, NULL, camion, NULL);
+        // Envoie de paramètres au camion créé
         msgsnd(msgid_camions_creation, &msg_creation_camion, sizeof(message_creation_camion) - sizeof(long), 0);
+        // Réception d'un message de confirmation de l'initialisation du véhicule
         msgrcv(msgid_camions_creation, &msg_creation_retour, sizeof(message_retour) - sizeof(long), 2, 0);
     }
 
@@ -674,27 +733,36 @@ int main(int argc, char const *argv[])
     msg_attente_camion.endormir_camion = FALSE;
     pthread_mutex_init(&mutex_prochain_camion, NULL);
 
-    // synchronisationCreationVehicules();
+    // On print les conteneurs des véhicules
     printConteneursVehicules();
     msg_creation_camion.attente = FALSE;
 
-    // Lancement du superviseur qui peut envoyer jusqu'à deux ordre à la fois: un par portique
+    // Lancement du superviseur qui peut envoyer un ordre par portique
     while (1)
     {
+        // Envoie des ordres
         pthread_create(&id_ordre_superviseur[0], NULL, envoieOrdreVehicule, (void *)0);
         pthread_create(&id_ordre_superviseur[1], NULL, envoieOrdreVehicule, (void *)1);
-        
+        // Attente de la fin des ordres
         pthread_join(id_ordre_superviseur[0], NULL);
         pthread_join(id_ordre_superviseur[1], NULL);
+        // On compte le nombre d'ordres qui ont réussi
         ordre_reussi = 0;
         ordre_reussi += retour_superviseur[0];
         ordre_reussi += retour_superviseur[1];
-        printf("Ordre reussi : %d\n", ordre_reussi);
+        // On attend des messages de confirmations des véhicules des ordres envoyés (en fonction de la variable ordre_reussi)
         for(int i = 0; i<ordre_reussi; ++i) {
+            // Attente d'un message de confirmation d'un véhicule
             msgrcv(msgid_superviseur, &msg_fin_ordre, sizeof(message_fin_ordre_superviseur) - sizeof(long), 1, 0);
+            // Si le véhicule est plein, il quitte le terminal et le superviseur en crée un nouveau
             if(msg_fin_ordre.plein_conteneurs == TRUE) {
+                /*
+                Si le véhicule qui est plein est un camion, on dit à un camion qui attend de remplacer
+                le camion qui est parti puis on crée un nouveau camion qui attend dans la file d'attente 
+                au même emplacement du camion qui vient de quitter la file d'attente
+                */
                 if(msg_fin_ordre.type_transport == CONTENEUR_POUR_CAMION) {
-                    printf("Création nouveau camion sur la voie %d à l'emplacement %d\n", msg_fin_ordre.camion_voie_portique, msg_fin_ordre.camion_emplacement);
+                    printf("Création nouveau camion + Déplacement d'un camion de la file d'attente à la voie %d à l'emplacement %d\n", msg_fin_ordre.camion_voie_portique, msg_fin_ordre.camion_emplacement);
                     msg_attente_camion.type = prochain_camion_attente;
                     msg_attente_camion.voie_portique = msg_fin_ordre.camion_voie_portique;
                     msg_attente_camion.emplacement_portique = msg_fin_ordre.camion_emplacement;
@@ -702,28 +770,38 @@ int main(int argc, char const *argv[])
                     msg_creation_camion.type = 1;
                     msg_creation_camion.attente = TRUE;
                     msg_creation_camion.num_attente = prochain_camion_attente;
+                    // Envoie d'un message à un camion qui attend pour qu'il remplace le camion qui vient de quitter le terminal de transport
                     msgsnd(msgid_camions_attente, &msg_attente_camion, sizeof(message_attente_camion) - sizeof(long), 0);
+                    // Attente d'un message de confirmation du message précédent
                     msgrcv(msgid_camions_creation, &msg_creation_retour, sizeof(message_retour) - sizeof(long), 3, 0);
-                    printf("Fin attente deplacement camion\n");
+                    // Création d'un nouveau cmaion
                     pthread_create(&id_camion, NULL, camion, NULL);
+                    // Envoie de paramètres au camion créé
                     msgsnd(msgid_camions_creation, &msg_creation_camion, sizeof(message_creation_camion) - sizeof(long), 0);
+                    // Réception d'un message de confirmation de l'initialisation du véhicule
                     msgrcv(msgid_camions_creation, &msg_creation_retour, sizeof(message_retour) - sizeof(long), 2, 0);
                     prochain_camion_attente = prochain_camion_attente % nb_camion_attente + 1;
-                    printf("Fin création camion\n");
-                }else if (msg_fin_ordre.type_transport == CONTENEUR_POUR_TRAIN) {
+                } // Si le train est plein, il quitte le terminal de transport et le superviseur crée un nouveau train
+                else if (msg_fin_ordre.type_transport == CONTENEUR_POUR_TRAIN) {
                     printf("Création d'un nouveau train\n");
+                    // Création d'un nouveau train
                     pthread_create(&id_train, NULL, train, NULL);
+                    // Réception d'un message de confirmation de l'initialisation du véhicule
                     msgrcv(msgid_trains_creations, &msg_creation_retour, sizeof(message_retour) - sizeof(long), 2, 0);
-                }else if (msg_fin_ordre.type_transport == CONTENEUR_POUR_BATEAU) {
+                } // Si le bateau est plein, il quitte le terminal de transport et le superviseur crée un nouveau bateau
+                else if (msg_fin_ordre.type_transport == CONTENEUR_POUR_BATEAU) {
                     printf("Création d'un nouveau bateau\n");
+                    // Création d'un nouveau bateau
                     pthread_create(&id_bateau, NULL, bateau, NULL);
+                    // Réception d'un message de confirmation de l'initialisation du véhicule
                     msgrcv(msgid_bateaux_creation, &msg_creation_retour, sizeof(message_retour) - sizeof(long), 2, 0);
                 }
             }
             
         }
-
+        // On print les conteneurs des véhicules
         printConteneursVehicules();
+        // Le superviseur dort 1 seconde avant d'envoyer des nouveaux ordres
         sleep(1);
     }
     return EXIT_SUCCESS;

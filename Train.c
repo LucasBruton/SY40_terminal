@@ -4,7 +4,6 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <pthread.h>
-#include <time.h>
 #include <sys/types.h>
 #include <signal.h>
 #include <unistd.h>
@@ -23,7 +22,7 @@ void *train(void *arg)
     msg_fin_ordre.type = 1;
     msg_fin_ordre.type_transport = CONTENEUR_POUR_TRAIN;
     msg_creation_retour.type = 2;
-    srand(time(NULL));
+    srand(&cle);
 
     // Récupération du segment de mémoire pour les trains
     if ((cle = ftok(FICHIER_TRAIN, 1)) == -1)
