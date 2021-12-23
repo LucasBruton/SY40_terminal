@@ -7,6 +7,7 @@
 #include <signal.h>
 #include <sys/shm.h>
 
+// Fonction permettant de créer un portique
 void * portique(void *arg) {
     key_t cle;
     int num_portique = (int)arg, msgid_trains, msgid_bateaux, msgid_camions[2],
@@ -16,7 +17,7 @@ void * portique(void *arg) {
     message_camion msg_camion;
     message_train msg_train;
     message_retour msg_creation_retour;
-    // Creation de la file de messages pour les trains
+    // Récupération de la file de messages pour les trains
     if ((cle = ftok(FICHIER_TRAIN, 2)) == -1)
     {
         printf("Erreur ftok\n");
@@ -28,6 +29,7 @@ void * portique(void *arg) {
         kill(getpid(), SIGINT);
     }
 
+    // Récupération de la file de messages pour les bateaux
     if ((cle = ftok(FICHIER_BATEAU, 2)) == -1)
     {
         printf("Erreur ftok\n");
@@ -63,6 +65,7 @@ void * portique(void *arg) {
         kill(getpid(), SIGINT);
     }
 
+    // Récupération de la file de message pour les portiques
     if ((cle = ftok(FICHIER_PORTIQUE, 1)) == -1)
     {
         printf("Erreur ftok\n");
@@ -86,6 +89,7 @@ void * portique(void *arg) {
         kill(getpid(), SIGINT);
     }
 
+    // Initialisation des variables des messages 
     msg_bateau.voie_portique = num_portique;
     msg_bateau.envoie_conteneur = FALSE;
     msg_bateau.type = 1;
@@ -96,25 +100,31 @@ void * portique(void *arg) {
     msg_train.voie_portique = num_portique;
     msg_creation_retour.type = 2;
 
+    // Envoie d'un message de confirmation d'initialisation du portique
     msgsnd(msgid_portiques_creation, &msg_creation_retour, sizeof(message_retour) - sizeof(long), 0);
 
     while(1) {
+        // Attente d'un message de déplacement de conteneur
         msgrcv(msgid_portiques, &msg_portique, sizeof(message_portique) - sizeof(long), num_portique + 1, 0);
-        printf("Portique %d: destination: %d\n", num_portique, msg_portique.destinataire);
+
         if(msg_portique.destinataire == CONTENEUR_POUR_BATEAU) {
+            // Envoie du conteneur récupéré au bateau
             msg_bateau.emplacement_conteneur = msg_portique.bateau_emplacement;
             printf("Portique %d a récupéré un portique à destination du bateau\n", num_portique);
             msgsnd(msgid_bateaux, &msg_bateau, sizeof(message_bateau)-sizeof(long), 0);
         }else if(msg_portique.destinataire == CONTENEUR_POUR_TRAIN) {
+            // Envoie du conteneur récupéré au train
             printf("Portique %d a récupéré un portique à destination du train\n", num_portique);
             msg_train.wagon_emplacement = msg_portique.wagon_emplacement;
             msg_train.wagon = msg_portique.train_wagon;
             msgsnd(msgid_trains, &msg_train, sizeof(message_train)-sizeof(long), 0);
         }else if (msg_portique.destinataire == CONTENEUR_POUR_CAMION) {
-            printf("Portique %d a récupéré un portique à destination d'un camion\n", num_portique);
+            // Envoie du conteneur récupéré au camion à l'emplacement msg_portique.camion_destinataire
+            printf("Portique %d a récupéré un portique à destination du camion à l'emplacement %d\n", num_portique, msg_portique.camion_destinataire);
             msg_camion.type = msg_portique.camion_destinataire;
             msgsnd(msgid_camions[num_portique], &msg_camion, sizeof(message_camion) - sizeof(long), 0);
         }else {
+            // Erreur
             printf("Erreur portique %d: destination du conteneur\n", num_portique);
             kill(getpid(), SIGINT);
         }

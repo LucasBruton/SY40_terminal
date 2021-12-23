@@ -11,6 +11,7 @@
 #include <sys/msg.h>
 #include <string.h>
 
+// Fonction permettant de créer un bateau
 void *bateau(void *arg)
 {
     key_t cle;
@@ -148,8 +149,10 @@ void *bateau(void *arg)
             conteneurs_bateau++;
             // On place le conteneur à un emplacement précisé par le portique
             stock_bateaux->espace_portique[msg_bateau.voie_portique][msg_bateau.emplacement_conteneur] = CONTENEUR_POUR_BATEAU;
-            // On regarde si le bateau est plein de conteneurs à destination du bateau
-            // Si le bateau est plein, il quitte le terminal de transportt
+            /* 
+            On regarde si le bateau est plein de conteneurs à destination du bateau
+            Si le bateau est plein, il quitte le terminal de transport
+            */
             if(conteneurs_bateau == bateau_rempli) {
                 msg_fin_ordre.plein_conteneurs = TRUE;
                 printf("Le bateau quitte le terminal de transport\n");

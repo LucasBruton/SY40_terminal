@@ -9,6 +9,7 @@
 #include <signal.h>
 #include <unistd.h>
 
+// Fonction permettant de créer un train
 void *train(void *arg)
 {
     key_t cle;
@@ -118,17 +119,23 @@ void *train(void *arg)
     }
     pthread_mutex_unlock(&stock_train->mutex);
 
+    // Envoie d'un message pour confirmer l'initialisation du train
     msgsnd(msgid_trains_creation, &msg_creation_retour, sizeof(message_retour) - sizeof(long), 0);
 
+    // Boucle infini de réception et d'envoi de messages
     while (1)
     {
+        // Réception d'un message qui indique si le train doit donner un conteneur à un portique ou s'il reçoit un conteneur
         msgrcv(msgid_trains, &msg_train, sizeof(message_train) - sizeof(long), 1, 0);
+        // Si le train donne un conteneur à un portique, il précise au portique où il doit donner le conteneur
         if (msg_train.envoie_conteneur == TRUE)
         {
+            // En donnant un conteneur à un portique, l'emplacement du conteneur devient vide
             pthread_mutex_lock(&stock_train->mutex);
             stock_train->espace_portique[msg_train.voie_portique][msg_train.wagon][msg_train.wagon_emplacement] = ESPACE_CONTENEUR_VIDE;
             pthread_mutex_unlock(&stock_train->mutex);
             printf("Le train donne son conteneur à l'emplacement %d du wagon %d qui se trouve sur la voie %d\n", msg_train.wagon_emplacement, msg_train.wagon, msg_train.voie_portique);
+            // On donne les informations nécessaires pour que le portique puisse donner le conteneur à la bonne destination
             msg_portique.destinataire = msg_train.destinataire;
             msg_portique.type = msg_train.voie_portique + 1;
             if (msg_train.destinataire == CONTENEUR_POUR_CAMION)
@@ -139,14 +146,22 @@ void *train(void *arg)
             {
                 msg_portique.bateau_emplacement = msg_train.bateau_emplacement;
             }
+            // On envoie le conteneur à un portique
             msgsnd(msgid_portiques, &msg_portique, sizeof(message_portique) - sizeof(long), 0);
         }
         else
         {
+            // Réception d'un conteneur
             pthread_mutex_lock(&stock_train->mutex);
             printf("Le train a reçu un conteneur pour l'emplacement %d du wagon %d de la voie du portique %d\n", msg_train.wagon_emplacement, msg_train.wagon, msg_train.voie_portique);
+            // On compte le nombre de conteneurs à destination du train que le train possède
             conteneurs_trains++;
+            // On place le conteneur à un emplacement précisé par le portique
             stock_train->espace_portique[msg_train.voie_portique][msg_train.wagon][msg_train.wagon_emplacement] = CONTENEUR_POUR_TRAIN;
+            /* 
+            On regarde si le train est plein de conteneurs à destination du train
+            Si le train est plein, il quitte le terminal de transport
+            */
             if (conteneurs_trains == train_rempli)
             {
                 msg_fin_ordre.plein_conteneurs = TRUE;

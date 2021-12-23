@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <sys/msg.h>
 
+// Fonction permettant de créer un camion
 void *camion(void *arg) {
     key_t cle;
     int shmid_mutex, shmid_camions, random, msgid_camions[2],

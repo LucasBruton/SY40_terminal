@@ -720,7 +720,6 @@ int main(int argc, char const *argv[])
                     msgrcv(msgid_bateaux_creation, &msg_creation_retour, sizeof(message_retour) - sizeof(long), 2, 0);
                 }
             }
-            printf("Retour reçu !!\n");
             
         }
 
