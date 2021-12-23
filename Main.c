@@ -725,7 +725,7 @@ int main(int argc, char const *argv[])
         }
 
         printConteneursVehicules();
-        // sleep(1);
+        sleep(1);
     }
     return EXIT_SUCCESS;
 }
